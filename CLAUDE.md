@@ -18,6 +18,14 @@ npm run check:compliance   # RLS, 90-day TTL, COPPA, BIPA, Strava write-only, se
 npm run verify             # all four, in order
 ```
 
+`npm run test:hooks` self-tests `.claude/hooks`; `npm run doctor` runs `expo-doctor` (network).
+
+## Testing facts (verified Day 1 — don't rediscover)
+- `@testing-library/react-native` 14: `render`, `rerender`, `fireEvent.*`, `act` are **async** — always `await`.
+- Wrap UI in `<SafeAreaProvider initialMetrics={initialWindowMetrics}>` or children never render.
+- Reanimated 4 needs `"resolver": "react-native-reanimated/jest/resolver"` (in package.json) + the mock in `jest.setup.js`.
+- SDK 58 app.json has no top-level `splash` (use the `expo-splash-screen` plugin).
+
 ## Architecture boundaries
 | Path | Owner slice | Notes |
 |---|---|---|

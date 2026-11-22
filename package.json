@@ -33,7 +33,8 @@
     "check:compliance": "node scripts/check-compliance.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"*.{ts,tsx,json}\"",
     "verify": "npm run typecheck && npm test && npm run lint:tokens && npm run check:compliance",
-    "test:hooks": "node scripts/test-hooks.mjs"
+    "test:hooks": "node scripts/test-hooks.mjs",
+    "doctor": "npx --yes expo-doctor@latest"
   },
   "private": true,
   "jest": {

@@ -8,11 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#07090B",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#07090B"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.pitchiq.mvp",

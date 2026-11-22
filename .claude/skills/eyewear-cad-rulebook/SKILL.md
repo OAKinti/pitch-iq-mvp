@@ -27,7 +27,7 @@ This is an unvalidated prototype. It is NOT certified eye protection (ASTM F803 
 | `BALLAST_G_TOTAL` | 25 g | ≈ 3.2 cm³ steel shot total, split across both temples |
 | `ASSEMBLY_CLEARANCE` | 0.30 mm | allowed 0.25–0.35 |
 | `MAX_Z_HEIGHT` | 60 mm | per part, as oriented for printing |
-Derived values (radius, sagitta, arc length, wrap at the pupils, lens strain) are computed in `params.py` and printed by `python hardware/glasses/params.py`.
+`python hardware/glasses/params.py` prints derived values and spec checks.
 
 ## 2. Known spec conflicts — resolve before Rev-0.1 geometry
 1. **Wrap vs. base curve.** On a cylinder of radius R, the face-form angle at a pupil offset x = PD/2 from the axis is `asin(x / R)`. 6-base (R 88.3) ⇒ `asin(31.5/88.3)` ≈ **20.9°**, not 15–18°. A 5-base (R 106 mm) gives ≈ 17.3°. Do not hack the geometry to fake both numbers. Model `BASE_CURVE` as a parameter and print the wrap check. The human picks the value in `SPRINT_STATE.md`. The default stays 6-base, as specified.
