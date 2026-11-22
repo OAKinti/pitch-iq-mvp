@@ -1,0 +1,85 @@
+# PitchIQ MVP smoke flow — Demo Mode + mock pose ("Simulate Live Drill").
+# Run: maestro test .maestro/mvp-smoke.yaml   (Expo Go: set appId to host.exp.exponent and openLink)
+appId: com.pitchiq.mvp
+name: PitchIQ MVP smoke
+---
+- launchApp:
+    clearState: true
+
+# 1. Onboarding: neutral age gate (empty fields), consent, persona, position
+- assertVisible:
+    id: screen-onboarding
+- tapOn:
+    id: age-year-input
+- inputText: "2004"
+- tapOn:
+    id: age-month-input
+- inputText: "6"
+- hideKeyboard
+- tapOn:
+    id: age-continue
+- tapOn:
+    id: consent-checkbox
+- tapOn:
+    id: consent-accept
+- tapOn:
+    id: persona-option-captain
+- tapOn:
+    id: position-option-MID
+- tapOn:
+    id: onboarding-finish
+
+# 2. Combine: simulated live Ball Mastery drill (30 s active + calibration)
+- assertVisible:
+    id: screen-combine
+- tapOn:
+    id: drill-option-ball_mastery
+- tapOn:
+    id: simulate-toggle
+- tapOn:
+    id: drill-start
+- assertVisible:
+    id: telemetry-phase
+- extendedWaitUntil:
+    visible:
+      id: drill-view-results
+    timeout: 45000
+- tapOn:
+    id: drill-view-results
+
+# 3. OVR card
+- assertVisible:
+    id: screen-ovr
+- assertVisible:
+    id: ovr-value
+- assertVisible:
+    id: archetype-0
+- assertVisible:
+    id: debrief-text
+
+# 4. Group session
+- tapOn:
+    id: ovr-group
+- assertVisible:
+    id: screen-group
+- assertVisible:
+    id: crown-performance
+- assertVisible:
+    id: crown-consistency
+- assertVisible:
+    id: rivalry-objective
+- back
+
+# 5. Highlight share
+- tapOn:
+    id: ovr-share
+- assertVisible:
+    id: screen-highlight
+- assertVisible:
+    id: highlight-window
+- assertVisible:
+    id: ffmpeg-command
+- assertVisible:
+    id: share-instagram_stories
+- assertVisible:
+    id: share-tiktok

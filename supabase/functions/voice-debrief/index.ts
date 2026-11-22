@@ -7,6 +7,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const MODEL = "claude-haiku-5-5";
 const MAX_CHARS = 400;
+// Server-side guards: the client composes the prompt, so the server bounds what
+// it will spend. ~40 debriefs/month × 400 chars ⇒ ≤ $0.64 TTS per user per month.
+const MAX_PROMPT_CHARS = 6000;
+const MONTHLY_DEBRIEF_CHAR_CAP = 16000;
 const VOICE_ENV: Record<string, string> = {
   captain: "ELEVENLABS_VOICE_CAPTAIN",
   drill_sergeant: "ELEVENLABS_VOICE_DRILL_SERGEANT",
@@ -55,6 +59,24 @@ Deno.serve(async (req: Request) => {
   if (typeof system !== "string" || typeof user !== "string" || typeof persona !== "string" || !(persona in VOICE_ENV)) {
     return json({ error: "invalid_request" }, 400);
   }
+  if (system.length + user.length > MAX_PROMPT_CHARS) {
+    return json({ error: "prompt_too_large" }, 413);
+  }
+
+  // Enforce the monthly budget BEFORE spending on the LLM or TTS.
+  const service = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const month = new Date().toISOString().slice(0, 7) + "-01";
+  const { data: row } = await service
+    .from("voice_usage")
+    .select("debrief_chars_used")
+    .eq("user_id", userId)
+    .eq("month", month)
+    .maybeSingle();
+  const usedChars = row?.debrief_chars_used ?? 0;
+  if (usedChars + MAX_CHARS > MONTHLY_DEBRIEF_CHAR_CAP) {
+    // Client falls back to its zero-cost template debrief.
+    return json({ text: null, refused: true, reason: "monthly_cap" });
+  }
 
   const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
   let text: string;
@@ -86,7 +108,6 @@ Deno.serve(async (req: Request) => {
 
   // ElevenLabs TTS (best effort: text is still returned if audio fails).
   let audioUrl: string | null = null;
-  const service = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const voiceId = Deno.env.get(VOICE_ENV[persona]!);
   if (voiceId) {
     try {
@@ -121,15 +142,8 @@ Deno.serve(async (req: Request) => {
   }
 
   // Track monthly usage (service role; clients are read-only via RLS).
-  const month = new Date().toISOString().slice(0, 7) + "-01";
-  const { data: row } = await service
-    .from("voice_usage")
-    .select("debrief_chars_used")
-    .eq("user_id", userId)
-    .eq("month", month)
-    .maybeSingle();
   await service.from("voice_usage").upsert(
-    { user_id: userId, month, debrief_chars_used: (row?.debrief_chars_used ?? 0) + text.length },
+    { user_id: userId, month, debrief_chars_used: usedChars + text.length },
     { onConflict: "user_id,month" },
   );
 
