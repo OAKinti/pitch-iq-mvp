@@ -70,6 +70,7 @@
         "lines": 90,
         "statements": 90
       }
-    }
+    },
+    "resolver": "react-native-reanimated/jest/resolver"
   }
 }
