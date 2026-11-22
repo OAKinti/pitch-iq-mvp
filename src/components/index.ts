@@ -8,3 +8,4 @@ export {
   StatBar,
   TelemetryReadout,
 } from './HudPrimitives';
+export { NavBackButton } from './NavBackButton';
