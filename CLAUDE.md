@@ -44,7 +44,7 @@ npm run verify             # all four, in order
 4. **Privacy**: skeletal joints only; face landmarks 1–10 redacted; no face/voice biometrics; neutral age gate (empty inputs); under-13 ⇒ private; consent screen before first camera use; raw video TTL ≤ 90 days.
 5. **Strava is write-only**: never ingested, never in AI prompts or shared leaderboards. Ingestion = HealthKit / Health Connect / WHOOP via `IngestionAdapter` → `WearableDailySummary`.
 6. **Highlights**: H.264 + AAC, `yuv420p`, progressive, `-movflags +faststart`; 640×480 transparent PNG sticker.
-7. **Secrets**: only `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_DEMO_MODE` may reach the client. Anthropic/ElevenLabs keys live in Supabase edge-function secrets.
+7. **Secrets**: the only `EXPO_PUBLIC_*` vars allowed are `SUPABASE_URL`, `SUPABASE_ANON_KEY` (RLS-protected), `DEMO_MODE`, and the public share identifiers `FACEBOOK_APP_ID`, `TIKTOK_CLIENT_KEY`. Anthropic/ElevenLabs/WHOOP/Strava secrets live in Supabase edge-function secrets.
 
 ## Workflow
 - Branches: `main` (protected, human-merged), `claude/*` (agent work), `feat/*` (humans). Never push to `main`, never `--force`, never `sudo`.
