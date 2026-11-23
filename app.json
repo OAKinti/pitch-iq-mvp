@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "PitchIQ",
+    "slug": "pitch-iq-mvp",
+    "scheme": "pitchiq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07090B",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.pitchiq.mvp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PitchIQ uses the camera to track your body's skeletal joints during drills. No facial geometry is collected, and tracking only starts after you give consent.",
+        "NSMicrophoneUsageDescription": "PitchIQ records audio only when you save a highlight clip.",
+        "NSPhotoLibraryAddUsageDescription": "PitchIQ saves highlight clips to your library so you can share them.",
+        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram-reels", "instagram", "tiktokopensdk", "snssdk1233", "snssdk1180"]
+      }
+    },
+    "android": {
+      "package": "com.pitchiq.mvp",
+      "adaptiveIcon": {
+        "backgroundColor": "#07090B",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.CAMERA"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+
+# secrets — NEVER commit
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Claude Code worktrees (vertical-builder subagents)
+.claude/worktrees/
+
+# Expo / Metro / build caches
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+*.tsbuildinfo
+coverage/
+.cache/
+.eas/
+
+# generated native folders (Continuous Native Generation)
+/ios
+/android
+.kotlin/
+*.orig.*
+
+# signing material
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# CAD build caches (exports in hardware/glasses/exports are committed)
+__pycache__/
+*.pyc
+.venv/
+
+# debug / OS
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+Thumbs.db
