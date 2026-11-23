@@ -8,7 +8,7 @@
 
 ## Status
 - **Current day:** Day 1 complete — waiting at HUMAN GATE 1
-- **Next task:** Owner creates the GitHub repo + pushes `claude/day-1-mvp` (D1.5), then HUMAN GATE 1
+- **Next task:** HUMAN GATE 1 — review and merge PR `claude/day-1-mvp` → `main` on GitHub
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Day 1 — Sun Nov 22 (software scaffold, executed in session 1)
@@ -18,7 +18,7 @@
 - [x] D1.3b Slice B `src/services/` — Supabase + Demo Mode, 3-tier voice coach, wearable adapters + Strava write-only enforcement, FFmpeg/IG/TikTok builders
 - [x] D1.3c Slice C `src/components/`, `src/screens/`, `src/navigation/` — 5 broadcast-HUD screens with testIDs, tokens only
 - [x] D1.4 Merge slices, wire `App.tsx`, `.maestro/mvp-smoke.yaml`, ui-qa-verifier pass, `.env.example`, `README.md`, `COLLABORATOR_SETUP.md`
-- [ ] D1.5 Push verified build to `claude/day-1-mvp` — PARTIAL: branch committed locally; push failed (GitHub repo `OAKinti/pitch-iq-mvp` does not exist yet). Owner: `gh repo create OAKinti/pitch-iq-mvp --private`, then `git push -u origin claude/day-1-mvp`
+- [x] D1.5 Push verified build to `claude/day-1-mvp`; base `main` created at empty root commit `fd96ec6`; PR opened `claude/day-1-mvp` → `main`
 - [ ] [HUMAN GATE 1] Owner: merge `claude/day-1-mvp` → `main` on GitHub; activate both routines per `docs/CLOUD_ROUTINES_SETUP.md`; send repo to collaborator; install `uv` and confirm `uv tool run --python 3.12 build123d-mcp@latest --version` works; decide shield base curve (see Decisions D-3)
 
 ## Day 1B / Day 2 AM — Sun night – Mon Nov 23 before 9:00 AM (hardware, local only)
@@ -60,7 +60,7 @@
 - D-4 (Nov 22) Upstream `ffmpeg-kit` was retired in 2025 (binaries pulled). D6.1 must pick a maintained fork or a native AVFoundation/MediaCodec path; command builders are library-agnostic.
 
 ## Blockers
-- B-1 (Owner) GitHub repo `OAKinti/pitch-iq-mvp` not created — `git push` returns "Repository not found" (gh auth OK: account OAKinti, scope `repo`). Create it (private recommended), then push `claude/day-1-mvp`.
+- ~~B-1~~ Resolved Nov 22: owner created private repo `OAKinti/pitch-iq-mvp`; `main` is the default branch.
 - B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2).
 
 ## Contract changes
@@ -74,6 +74,10 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-22 — local (Opus 5.5) — claude/day-1-mvp
+- Did: created remote `main` at empty root commit `fd96ec6` (via GitHub API, no code on main), set `main` as default branch, opened Day 1 PR. No Day 2 work started.
+- Next: owner reviews + merges the PR (HUMAN GATE 1).
+
 ### 2026-11-22 11:40 ET — local (Opus 5.5 orchestrator + 3 Sonnet vertical-builders + Sonnet ui-qa-verifier) — main → claude/day-1-mvp
 - Did: Expo SDK 58 scaffold; frozen contracts/tokens/schema; hooks/skills/agents/MCP; Slices A (domain), B (services), C (UI) built in parallel git worktrees and merged; docs; CAD params with spec checks.
 - Verified (merged main): `npm run verify` → 0 [typecheck 0; jest 17 suites / 184 tests, coverage 100 % stmts/branches/funcs/lines; lint:tokens 0 violations; check:compliance 16/16]; `npm run test:hooks` → 0 (14/14); `npx expo-doctor` → 20/20; `npx expo export --platform android|ios` → 0 (1045/1047 modules, Hermes bundles); ui-qa-verifier → PASS, 0 blocking defects.
