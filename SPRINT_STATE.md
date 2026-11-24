@@ -13,8 +13,8 @@
 > Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 2–3. Waves 0–2 done: PR-A `claude/d2-0-prereq` (D2.0, D6.0), PR-B `claude/sprint-d2-d6` (D2.1a–D2.5a, D2.2b, D4.1a, D4.2a, D6.1a, D6.2a, D7.4a). Waves 3–4 run on `claude/sprint-d5-d7`.
-- **Next task:** wave 3 D5.1a (Maestro flows + contrast tests), then wave 4 D7.2 release audit. Humans: Person A D2.1/D2.2 device checks (Dev Client from PR-A); Person B D2.3 → D2.4/D2.5 → D4.1.
+- **Current day:** Day 2–3. All agent waves run: PR-A `claude/d2-0-prereq` (D2.0, D6.0), PR-B `claude/sprint-d2-d6` (D2.1a–D2.5a, D2.2b, D4.1a, D4.2a, D6.1a, D6.2a, D7.4a), PR-C `claude/sprint-d5-d7` (D5.1a, D7.2 partial).
+- **Next task:** **D7.2 is BLOCKED by B-5 (release-blocking, owner decisions + frozen migration 004).** Humans: Person A D2.1/D2.2 device checks (Dev Client from PR-A); Person B D2.3 → D2.4/D2.5 → D4.1, and review `docs/proposals/004_security_hardening.sql`.
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
@@ -88,6 +88,14 @@
 - B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2; now HUMAN GATE 4, hardware only).
 - B-3 (Owner, non-blocking, defaults applied) Fable spec decisions: SEC-17 under-13 / unknown age ⇒ all sharing locked (`share-age-locked`); D7.4a `android.blockedPermissions` (media read, storage, location; never CAMERA/RECORD_AUDIO); TikTok iOS redirect URI needs a universal-link domain before D6.2.
 - B-4 (Person A, D6.1 follow-ups from wave-2 audit round 2, minor, no current trigger): `src/services/highlight/cameraMode.ts:75` settle the pending resolver before `emit()` in finishMount/onTimeout (CON-10); `src/services/highlight/highlightEncoderBinding.ts:85` reject echoed `durationMs <= 0` as `spec_mismatch` (FAIL-13). Known limit (D4.2a): Realtime publication carries only `group_session_results`, so roster joins/leaves reach other clients at the next result update.
+- **B-5 (Owner + Person B) RELEASE-BLOCKING, D7.2 security-privacy-auditor, Nov 24.** Agent fix landed for the purge edge function (paged, pointer cleared only after its object is deleted). Everything else is in the frozen schema or needs a decision, drafted in `docs/proposals/004_security_hardening.sql` (untested; copy to `supabase/migrations/004_…`, add the pgTAP checks, `supabase test db`):
+  - H-purge: `purge_expired_raw_videos()` is SECURITY DEFINER with PUBLIC execute (anon can orphan expired videos) and 001's pg_cron job runs it alone, nulling pointers without deleting objects → revoke + unschedule + schedule the edge function (pg_net + Vault).
+  - H-consent: clients can UPDATE their own `age_bracket` / `parental_consent_verified_at`, insert `parental_verified`, delete consents → table-level revoke + column grants, insert-only consents.
+  - H-groups: anyone can join any group by id and then read co-members, including under-13 profiles → membership-checked result inserts + under-13 hidden until parent-verified (drafted); **decision B:** invite-code join.
+  - H-auth (**decision A**): the app never signs in (`DEMO_USER_ID 'demo-you'`), so outside Demo Mode every RLS write fails silently and consent / age live only in memory (age gate retryable after restart) → anonymous sign-in, persist consent + age server-side; likely contract v1.2.0.
+  - Medium: `is_group_member` search_path; client-settable `created_at` defeats the 90-day CHECK; any `raw_video_path` accepted (drafted). **Decision C:** skip Tier 2 Haiku/ElevenLabs debrief for unverified under-13.
+  - Low: client Q&A budget not wired to `voice-qa`; debrief audio has no TTL; Android mic permission on in expo-camera but off in expo-audio.
+  - code-scout Mediums (no Critical/High client-side): stale debrief can overwrite a newer drill's (`AppStateContext.tsx:211`); double-tap `drill-view-results` runs completeDrill twice (`CombineDrillScreen.tsx:104`).
 
 ## Contract changes
 - v1.0.0 frozen Nov 22.
@@ -101,6 +109,11 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-24 — local (Opus 5.5, Agenticverse waves 3–4) — claude/sprint-d5-d7
+- Did: D5.1a (3 Maestro flows statically validated, WCAG contrast tests over tokens, reduce-motion fallbacks, share-screen sticker + under-13 lock, own-row rank contrast fix). D7.2: `/agenticverse audit-security` (0 Critical/High; 1 fake test key, 4 moderate build-tool npm advisories), `slim` (0 findings), code-scout (1 High: purge), security-privacy-auditor (RELEASE-BLOCKING: 4 High, 3 Medium, 4 Low → B-5). Fixed the purge edge function (new jest-tested `_shared/purgeCore.ts`); drafted migration 004 as a proposal (frozen area).
+- Verified: `npm run verify` → 0 (50 suites, 472 tests, coverage 99.48/98.36/100/99.83, lint:tokens 0, compliance 16/16). Cross-audit wave 3 PASS (0); wave 4 PASS (1 minor in the proposal SQL, fixed).
+- Not done: D7.2 unticked (B-5). D7.3/D7.4 need a device / EXPO_TOKEN. No Maestro run (no device).
+- Next: owner decides B-5 A–C; Person B reviews + applies 004 after D2.3; then re-run `security-privacy-auditor`.
 ### 2026-11-24 — local (Opus 5.5, Agenticverse waves 1–2) — claude/sprint-d2-d6
 - Did: Fable spec step (49 clauses, briefs D4.1a/D4.2a/D6.1a/D6.2a/D5.1a/D7.4a). Sonnet vertical-builders, 2 at a time, disjoint paths, orchestrator commits + barrels: D2.1a pose source, D2.2a skeleton + Skia overlay, D2.3a Realtime rejoin, D2.4a CuePlayer + cue CLI, D2.5a server-side debrief + voice-qa + pgTAP, D7.4a release config, D2.2b Combine wiring, D4.1a usage telemetry + cost report, D4.2a leaderboard convergence, D6.1a ClipEncoder + camera-mode controller, D6.2a sticker + share handoff.
 - Verified: `npm run verify` → 0 (44 suites, 393 tests, coverage 99.48/98.36/100/99.83, lint:tokens 0, compliance 16/16); `npx expo export --platform android` → 0 and `--platform ios` → 0 with `modules/*` absent (lazy requires in try/catch are Metro optional deps); ui-qa-verifier PASS (no Maestro run, no device). Cross-audits: wave 1 PASS after 2 minor fixes; wave 2 round 1 FAIL (REC-1 stall teardown, iOS inactive reset, CON-9 timer, wrapped log parse, cp1252 bytes) → fixed with regression tests → round 2 PASS (2 minor → B-4).
