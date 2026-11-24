@@ -169,3 +169,5 @@ Gate: the Combine screen must refuse to start tracking until `camera_skeletal_tr
 **Group sync (D4.2a)**: `SupabaseRepository.listGroupMembers` returns ascending `userId` order; `subscribeToGroup` delivers latest-wins snapshots (CON-5..CON-8).
 
 **Highlight (D6.1a)** — `src/services/highlight/index.ts`: `HIGHLIGHT_CLIP_SPEC`, `buildClipEncodeRequest`, `isValidClipRequest`, `ClipEncoder`/`ClipEncodeRequest`/`ClipEncodeResult`/`ClipEncodeFailure`, `CLIP_DURATION_SLACK_MS`, `createNativeClipEncoder`, `isHighlightEncoderAvailable`, `NativeHighlightEncoder`, `createHighlightClipService`, `ClipFiles`/`HighlightClipResult`/`HighlightClipService`, `createExpoClipFiles`, `CAMERA_TEARDOWN_MS`, `CAMERA_TEARDOWN_TIMEOUT_MS`, `createCameraModeController` (+ `CameraMode*`, `MountedCamera` types). Only `highlightEncoderBinding.ts` references `modules/highlight-encoder`.
+
+**Voice (D4.1a)**: `supabase/functions/_shared/usageTelemetry.ts` (`toUsageRecord`, `formatUsageLogLine`, `parseUsageLogLine`), `src/services/voice/costReport.ts` (`summarizeDebriefUsage`, `renderCostReport`), `scripts/debrief-cost-report.ts`.
