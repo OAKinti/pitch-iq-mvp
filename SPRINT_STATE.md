@@ -13,8 +13,8 @@
 > Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 1 merged to `main` (PR #1, Nov 23). Day 2–7 agent work runs as combined Agenticverse waves.
-- **Next task:** HUMAN GATE 1, then `docs/AGENTICVERSE_SPRINT.md` wave 0 (D2.0 + D6.0)
+- **Current day:** Day 2–3. Wave 0 done (D2.0 + D6.0) on `claude/d2-0-prereq` (PR-A); waves 1–4 run on `claude/sprint-d2-d6` / `claude/sprint-d5-d7`.
+- **Next task:** wave 1 (D2.1a, D2.2a, D2.3a, D2.4a, D2.5a, D7.4a). Humans: Person A `eas build --profile development` from `claude/d2-0-prereq`; Person B D2.3 Supabase provisioning.
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
@@ -22,7 +22,7 @@
 
 ## Track: software
 ### Day 2–3 — Mon–Tue Nov 23–24
-- [ ] D2.0 Prereq on `claude/d2-0-prereq`, own PR, human-merged (D-5, D-6 accepted Nov 24): `npx expo install expo-dev-client expo-build-properties expo-audio @shopify/react-native-skia react-native-svg expo-mediapipe-pose@0.5.2` (+ D-7 packages if accepted before this PR opens); app.json plugins (dev-client, build-properties android minSdkVersion 26, expo-audio no record/background); `eas.json` development + production profiles; jest.setup.js mocks (skia, expo-audio, expo-mediapipe-pose); contract v1.1.0 (DebriefRequest/Response types, migration 003 quota RPCs, INTERFACE_CONTRACTS, CONTRACT_VERSION); CLAUDE.md CV-slice row; verify + expo-doctor + export android/ios; brief `.agenticverse/briefs/D2.0.brief.md`
+- [x] D2.0 Prereq on `claude/d2-0-prereq`, own PR, human-merged (D-5, D-6 accepted Nov 24): `npx expo install expo-dev-client expo-build-properties expo-audio @shopify/react-native-skia react-native-svg expo-mediapipe-pose@0.5.2` (+ D-7 packages if accepted before this PR opens); app.json plugins (dev-client, build-properties android minSdkVersion 26, expo-audio no record/background); `eas.json` development + production profiles; jest.setup.js mocks (skia, expo-audio, expo-mediapipe-pose); contract v1.1.0 (DebriefRequest/Response types, migration 003 quota RPCs, INTERFACE_CONTRACTS, CONTRACT_VERSION); CLAUDE.md CV-slice row; verify + expo-doctor + export android/ios; brief `.agenticverse/briefs/D2.0.brief.md`
 - [ ] D2.1a after D2.0: `PoseSourceProvider` in `src/services/cv/` (toPoseFrame + sanitize, mock + mediapipe providers, selectPoseSource, stall watchdog, FpsMeter, lazy mediapipe binding + `MediapipePoseView`) with tests; brief `.agenticverse/briefs/D2.1a.brief.md`
 - [ ] D2.2a after D2.0: `projectSkeleton` in `src/domain/pose/` (100 % coverage) + Skia `SkeletonOverlay` (+ web fallback) in `src/components/`; brief `.agenticverse/briefs/D2.2a.brief.md`
 - [ ] D2.3a after D2.0: Realtime rejoin - `subscribeToGroup` re-fetches members on every SUBSCRIBED; fake-channel tests; brief `.agenticverse/briefs/D2.3a.brief.md`
@@ -36,7 +36,7 @@
 - [ ] D2.5 [human:B] [secret:EXPO_PUBLIC_SUPABASE_URL] Person B: after D2.3 run live DEV-2 checks on the deployed functions (legacy `{system,user}` body → 400, strava wearable → 400, monthly-cap refusal, `voice-qa` grants 0 at cap) and approve the server prompt wording
 
 ### Day 4–7 agent work, pulled forward into the Agenticverse waves (briefs written by the wave-0 spec step)
-- [ ] D6.0 Decision D-7 (no code): maintained 15 s highlight-clip encoder (D-4: upstream ffmpeg-kit retired) that shares the camera session with expo-mediapipe-pose or records via vision-camera 5.2.4 without mounting two sessions, plus view-shot and Instagram Stories / TikTok Share Kit handoff packages for the Expo SDK 58 dev client; every version checked with `npm view`; record D-7 PROPOSED with the exact install line
+- [x] D6.0 Decision D-7 (no code): maintained 15 s highlight-clip encoder (D-4: upstream ffmpeg-kit retired) that shares the camera session with expo-mediapipe-pose or records via vision-camera 5.2.4 without mounting two sessions, plus view-shot and Instagram Stories / TikTok Share Kit handoff packages for the Expo SDK 58 dev client; every version checked with `npm view`; record D-7 PROPOSED with the exact install line
 - [ ] D4.1a after D2.5a: debrief usage telemetry (prompt/output tokens, TTS chars) returned by `voice-debrief` within contract v1.1.0 (else propose v1.2.0) + `scripts/debrief-cost-report.ts` comparing logged usage with `costModel.ts`; tests
 - [ ] D4.2a after D2.3a: two-client Group Session leaderboard convergence tests on fake Realtime channels (join, leave, rejoin, out-of-order and duplicate updates)
 - [ ] D6.1a after D6.0, D2.1a: highlight-clip service behind a library-agnostic `ClipEncoder` interface using the D-7 package (native module mocked) + `buildHighlightClipArgs` output checks for h264/aac/yuv420p/faststart; tests
@@ -99,6 +99,10 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-24 — local (Opus 5.5, Agenticverse wave 0) — claude/d2-0-prereq
+- Did: owner confirmed HUMAN GATE 1 (tick carried into this branch). D6.0: Gemini research → D-7 recorded, versions checked with `npm view`, owner ACCEPTED and folded the D-7 packages into D2.0. D2.0: native deps, app.json plugins (explicit permission strings; the `expo-mediapipe-pose` plugin would otherwise overwrite the BIPA camera text), `eas.json`, jest mocks, contract v1.1.0 + migration 003. Added `expo-asset` (expo-audio peer, flagged by expo-doctor). Expo pinned `react-native-view-shot` 6.1.1.
+- Verified: `npm run verify` → 0 (17 suites, 184 tests, 16/16 compliance); `npm run test:hooks` → 0; `npx expo-doctor` → 0 (20/20); `npx expo export --platform android` → 0; `--platform ios` → 0. Cross-family audit (Gemini Neon) PASS, 0 findings.
+- Next: wave 1 on `claude/sprint-d2-d6` from this branch. Migration 003 is not yet run against Postgres; the D2.5a pgTAP test and Person B's `supabase test db` cover it.
 ### 2026-11-24 — local (Opus 5.5, Agenticverse) — claude/agenticverse-sprint
 - Did: merged Agenticverse harness v2; owner accepted D-5/D-6 (D2.0 is now an agent task); Day 4–7 agent halves pulled forward (D-8); hardware items moved from GATE 1 to GATE 4; build123d MCP moved out of project scope; builders share one tree; verify runs once per task; `docs/AGENTICVERSE_SPRINT.md` holds the wave-run prompt.
 - Verified: `npm run verify` → see commit; `npm run test:hooks` → see commit. No product code changed.
