@@ -19,9 +19,13 @@ alter function public.purge_expired_raw_videos() set search_path = '';
 -- H-2: drop the SQL-only nightly job.
 do $$
 begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron')
-     and exists (select 1 from cron.job where jobname = 'purge-expired-raw-videos') then
-    perform cron.unschedule('purge-expired-raw-videos');
+  -- Nested + dynamic SQL: referencing cron.job directly fails at plan time when pg_cron is absent.
+  if to_regclass('cron.job') is not null then
+    if exists (select 1 from pg_extension where extname = 'pg_cron') then
+      execute $q$
+        select cron.unschedule(jobid) from cron.job where jobname = 'purge-expired-raw-videos'
+      $q$;
+    end if;
   end if;
 end $$;
 
