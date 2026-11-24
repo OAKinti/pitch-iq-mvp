@@ -1,4 +1,4 @@
-# Interface Contracts (FROZEN — v1.0.0, Nov 22 2026)
+# Interface Contracts (FROZEN — v1.1.0, Nov 24 2026; v1.0.0 Nov 22)
 
 Types live in [`src/types/contracts.ts`](../src/types/contracts.ts). Tokens live in
 [`src/theme/tokens.ts`](../src/theme/tokens.ts). Schema lives in
@@ -12,7 +12,8 @@ Changing a frozen signature requires: (1) update this file, (2) bump `CONTRACT_V
 | Slice | Owns | Imports allowed |
 |---|---|---|
 | A — Domain | `src/domain/**`, `src/__tests__/domain/**` | `src/types` only |
-| B — Services | `src/services/**`, `src/__tests__/services/**`, `supabase/functions/**` | `src/types`, `src/domain` (types + pure fns), `src/theme/tokens.ts` (share colors only) |
+| CV (Person A) | `src/services/cv/**`, `src/__tests__/services/cv/**` | as B; the ONLY place that imports `expo-mediapipe-pose`; emits sanitized `PoseFrame` only |
+| B — Services | `src/services/**` (except `cv/`), `src/__tests__/services/**`, `supabase/functions/**` | `src/types`, `src/domain` (types + pure fns), `src/theme/tokens.ts` (share colors only) |
 | C — UI | `src/components/**`, `src/screens/**`, `src/navigation/**`, `src/state/**`, `src/__tests__/ui/**` | everything above via the `src/domain` and `src/services` barrels |
 
 No slice edits `package.json`, `src/types/**`, `src/theme/**`, or migrations. Need a change? Stop and report it.
@@ -98,9 +99,10 @@ export const TTS_USD_PER_1K_CHARS: 0.04;
 export const HAIKU_MODEL_ID: 'claude-haiku-5-5';
 export function estimateDebriefCostUsd(ttsChars: number, inputTokens: number, outputTokens: number): number;
 export interface DebriefInput { persona: CoachPersona; result: DrillResult; ovr: OvrResult; badges: readonly Badge[]; topArchetype?: ArchetypeMatch; wearables?: readonly WearableDailySummary[] }
-export function buildDebriefPrompt(input: DebriefInput): { system: string; user: string }; // throws on non-AI-safe sources
+export function buildDebriefRequest(input: DebriefInput): DebriefRequest; // v1.1.0 (D2.5a): replaces buildDebriefPrompt (removed from barrel); throws on non-AI-safe sources
 export function templateDebrief(input: DebriefInput): string; // zero-key Demo Mode, ≤ DEBRIEF_MAX_CHARS
-export interface DebriefTransport { requestDebrief(prompt: { system: string; user: string }, persona: CoachPersona): Promise<{ text: string; audioUri: string | null; inputTokens: number; outputTokens: number }> }
+export const DEBRIEF_TIMEOUT_MS: 12_000; // v1.1.0
+export interface DebriefTransport { requestDebrief(request: DebriefRequest): Promise<{ text: string; audioUri: string | null; inputTokens: number; outputTokens: number }> }
 export function createEdgeFunctionTransport(client: SupabaseClient): DebriefTransport;
 export interface QaBudget { readonly capSeconds: number; remainingSeconds(): number; canStart(): boolean; consume(seconds: number): number }
 export function createQaBudget(opts: { capMinutes: number; usedSeconds?: number }): QaBudget; // capMinutes clamped to [5, 10]
@@ -137,7 +139,7 @@ Screens (all in `src/screens/`), each with a root `testID`:
 | Screen | Root testID | Required child testIDs |
 |---|---|---|
 | `OnboardingScreen` | `screen-onboarding` | `age-year-input`, `age-month-input`, `age-continue`, `consent-checkbox`, `consent-accept`, `persona-option-<persona>`, `position-option-<pos>`, `onboarding-finish` |
-| `CombineDrillScreen` | `screen-combine` | `drill-option-ball_mastery`, `drill-option-agility_shuttle`, `simulate-toggle`, `telemetry-phase`, `telemetry-count`, `telemetry-rate`, `telemetry-timer`, `cue-caption`, `drill-start`, `drill-view-results` |
+| `CombineDrillScreen` | `screen-combine` | `drill-option-ball_mastery`, `drill-option-agility_shuttle`, `simulate-toggle`, `skeleton-overlay`, `telemetry-fps`, `pose-source` (v1.1.0, D2.2b), `telemetry-phase`, `telemetry-count`, `telemetry-rate`, `telemetry-timer`, `cue-caption`, `drill-start`, `drill-view-results` |
 | `OVRCardScreen` | `screen-ovr` | `ovr-value`, `ovr-band`, `attr-<key>`, `badge-<id>`, `archetype-0`, `debrief-text`, `ovr-share`, `ovr-group` |
 | `GroupSessionScreen` | `screen-group` | `leaderboard-row-<userId>`, `crown-performance`, `crown-consistency`, `rivalry-objective` |
 | `HighlightShareScreen` | `screen-highlight` | `highlight-window`, `ffmpeg-command`, `share-instagram_stories`, `share-instagram_reels`, `share-tiktok` |
@@ -145,3 +147,29 @@ Screens (all in `src/screens/`), each with a root `testID`:
 Navigation: `src/navigation/AppNavigator.tsx` exports `AppNavigator` and `type RouteName`.
 App state: `src/state/AppStateContext.tsx` (onboarding profile, consents, latest results, OVR).
 Gate: the Combine screen must refuse to start tracking until `camera_skeletal_tracking` consent exists.
+
+## v1.1.0 additions (Nov 24, D-5 / D-6 / D-7) — full signatures in `.agenticverse/sprint_contract.json` → `interfaces`
+
+**`src/types/contracts.ts`** (frozen): `DebriefDrillMetrics`, `DebriefWearable`, `DebriefRequest` (`v: 2`), `DebriefFailureReason`, `DebriefResponse`; `CONTRACT_VERSION = 1.1.0`.
+
+**CV slice — `src/services/cv/index.ts` barrel** (D2.1a): `PoseSourceProvider`, `PoseSourceError`, `PoseSourceStats`, `POSE_STALL_MS`, `RawPoseResult`, `toPoseFrame`, `PoseClock`, `PoseSourceUnavailableReason`, `createMockPoseSource`, `createMediapipePoseSource`, `selectPoseSource`, `isMediapipeAvailable`, `MediapipePoseView` (+ `MediapipePoseViewProps`), `FpsMeter`, `createFpsMeter`.
+
+**Domain — `src/domain/index.ts`** (D2.2a): `SKELETON_BONES`, `ProjectedJoint`, `ProjectedBone`, `ProjectedSkeleton`, `projectSkeleton`.
+
+**Components** (D2.2a): `SkeletonOverlay` (+ `.web.tsx` fallback), default testID `skeleton-overlay`.
+
+**Audio — `src/services/audio/index.ts`** (D2.4a): `CueAudioSource`, `CueSourceMap`, `AudioPlayerLike`, `CuePlayerDeps`, `CuePlayer`, `CUE_AUDIO_MODE`, `createCuePlayer`, `CUE_AUDIO_SOURCES`, `CueClipPlan`, `planCueClips`, `renderCueSourcesModule`.
+
+**Voice** (D2.5a): `buildDebriefRequest`, `DEBRIEF_TIMEOUT_MS`, `DebriefTransport` v2; `buildDebriefPrompt` removed from the barrel. Server: `supabase/functions/_shared/voiceCore.ts` (`parseDebriefRequest`, `buildServerPrompt`, `handleDebrief`, `handleQa`), `voice-debrief` v2 and `voice-qa` HTTP.
+
+**Schema — `supabase/migrations/003_voice_usage_rpc.sql`** (frozen): `reserve_debrief_chars(uuid, int, int default 16000) → date`, `refund_debrief_chars(uuid, date, int)`, `consume_qa_seconds(uuid, int, int default 300) → (granted, remaining)`. SECURITY DEFINER, `search_path = `, execute granted to `service_role` only.
+
+**Native packages (D2.0)**: `expo-dev-client`, `expo-build-properties` (android minSdk 26), `expo-audio`, `@shopify/react-native-skia`, `react-native-svg`, `expo-mediapipe-pose@0.5.2` (D-5); `expo-camera`, `expo-file-system`, `expo-media-library`, `react-native-view-shot`, `react-native-share` (D-7). Global jest mocks for Skia, expo-audio and expo-mediapipe-pose live in `jest.setup.js`; builders never edit it.
+
+**Group sync (D4.2a)**: `SupabaseRepository.listGroupMembers` returns ascending `userId` order; `subscribeToGroup` delivers latest-wins snapshots (CON-5..CON-8).
+
+**Highlight (D6.1a)** — `src/services/highlight/index.ts`: `HIGHLIGHT_CLIP_SPEC`, `buildClipEncodeRequest`, `isValidClipRequest`, `ClipEncoder`/`ClipEncodeRequest`/`ClipEncodeResult`/`ClipEncodeFailure`, `CLIP_DURATION_SLACK_MS`, `createNativeClipEncoder`, `isHighlightEncoderAvailable`, `NativeHighlightEncoder`, `createHighlightClipService`, `ClipFiles`/`HighlightClipResult`/`HighlightClipService`, `createExpoClipFiles`, `CAMERA_TEARDOWN_MS`, `CAMERA_TEARDOWN_TIMEOUT_MS`, `createCameraModeController` (+ `CameraMode*`, `MountedCamera` types). Only `highlightEncoderBinding.ts` references `modules/highlight-encoder`.
+
+**Voice (D4.1a)**: `supabase/functions/_shared/usageTelemetry.ts` (`toUsageRecord`, `formatUsageLogLine`, `parseUsageLogLine`), `src/services/voice/costReport.ts` (`summarizeDebriefUsage`, `renderCostReport`), `scripts/debrief-cost-report.ts`.
+
+**Share (D6.2a)** — `src/services/share/index.ts`: `getShareConfig`/`ShareConfig`, `STICKER_CAPTURE_OPTIONS`, `createStickerCapture` (+ `StickerCapture*` types), `createSocialHandoff` (+ `SocialHandoff*`, `InstagramStoriesPayload`, `NativeSocialHandoff`, `SocialShareRequest` types), `createDefaultSocialHandoffDeps`, `getNativeSocialHandoff`. Component `OvrSticker` (`OvrStickerProps`), testIDs `ovr-sticker`, `ovr-sticker-value`, `ovr-sticker-band`, `ovr-sticker-position`. Only `socialHandoffBinding.ts` references `modules/social-handoff`, `react-native-share` and `expo-media-library`; only `stickerCapture.ts` references `react-native-view-shot`.
