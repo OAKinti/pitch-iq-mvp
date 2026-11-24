@@ -23,9 +23,19 @@ const SEED: readonly {
   bestOvr: number;
   daysAgo: readonly number[];
 }[] = [
-  { userId: 'demo-maya', displayName: 'Maya Rivera', bestOvr: 78.4, daysAgo: [0, 1, 3, 4, 6, 9, 12, 15, 21, 30, 44, 60, 75] },
+  {
+    userId: 'demo-maya',
+    displayName: 'Maya Rivera',
+    bestOvr: 78.4,
+    daysAgo: [0, 1, 3, 4, 6, 9, 12, 15, 21, 30, 44, 60, 75],
+  },
   { userId: 'demo-jonas', displayName: 'Jonas Weber', bestOvr: 83.1, daysAgo: [2, 9, 20, 41, 70] },
-  { userId: 'demo-amara', displayName: 'Amara Okafor', bestOvr: 71.9, daysAgo: [0, 2, 5, 7, 10, 14, 19, 33, 50, 66, 88] },
+  {
+    userId: 'demo-amara',
+    displayName: 'Amara Okafor',
+    bestOvr: 71.9,
+    daysAgo: [0, 2, 5, 7, 10, 14, 19, 33, 50, 66, 88],
+  },
   { userId: 'demo-kenji', displayName: 'Kenji Tanaka', bestOvr: 66.2, daysAgo: [1, 8, 29, 57] },
   { userId: DEMO_USER_ID, displayName: 'You', bestOvr: 0, daysAgo: [] },
 ];
@@ -131,7 +141,7 @@ export class SupabaseRepository implements PitchIqRepository {
     if (resultsRes.error) throw new Error(`listGroupMembers failed: ${resultsRes.error.message}`);
     const results = (resultsRes.data ?? []) as unknown as ResultRow[];
 
-    return rows.map((row) => {
+    const stats = rows.map((row) => {
       const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       const mine = results.filter((r) => r.user_id === row.user_id);
       const days = new Set(mine.map((r) => r.submitted_at.slice(0, 10)));
@@ -142,18 +152,40 @@ export class SupabaseRepository implements PitchIqRepository {
         activeDays: [...days].sort(),
       };
     });
+    // Canonical order (CON-7): ascending userId, plain compare, independent of row order.
+    return stats.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
   }
 
   subscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void {
+    let closed = false;
+    let started = 0;
+    let delivered = 0;
+    // State-based convergence: every trigger refetches; latest-wins delivery (CON-5).
+    const refresh = (): void => {
+      const n = ++started;
+      this.listGroupMembers(groupId)
+        .then((members) => {
+          if (closed || n <= delivered) return;
+          delivered = n;
+          onChange(members);
+        })
+        .catch(() => undefined);
+    };
     const channel = this.client
       .channel(`group:${groupId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_session_results' }, () => {
-        void this.listGroupMembers(groupId)
-          .then(onChange)
-          .catch(() => undefined);
-      })
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_session_results' },
+        // Payload is a trigger only, never data (SEC-12).
+        () => refresh(),
+      )
+      .subscribe((status: string) => {
+        // First join and every rejoin after CHANNEL_ERROR / TIMED_OUT (REC-4).
+        if (status === 'SUBSCRIBED' && !closed) refresh();
+      });
     return () => {
+      if (closed) return;
+      closed = true;
       void this.client.removeChannel(channel);
     };
   }

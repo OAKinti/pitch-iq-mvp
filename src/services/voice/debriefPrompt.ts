@@ -2,6 +2,8 @@ import type {
   ArchetypeMatch,
   Badge,
   CoachPersona,
+  DebriefDrillMetrics,
+  DebriefRequest,
   DrillResult,
   OvrResult,
   WearableDailySummary,
@@ -18,15 +20,9 @@ export interface DebriefInput {
   wearables?: readonly WearableDailySummary[];
 }
 
-const PERSONA_VOICE: Record<CoachPersona, string> = {
-  captain: 'You are "The Captain", a calm, composed team leader. Speak steadily and encouragingly.',
-  drill_sergeant: 'You are "The Drill Sergeant", intense and demanding but never abusive. Short, punchy sentences.',
-  hype: 'You are "The Hype Coach", bursting with energy and enthusiasm. Celebrate effort.',
-};
-
 const r1 = (n: number): number => Math.round(n * 10) / 10;
 
-function compactMetrics(result: DrillResult): Record<string, unknown> {
+function compactMetrics(result: DrillResult): DebriefDrillMetrics {
   const m = result.metrics;
   if (m.drillType === 'ball_mastery') {
     return {
@@ -49,21 +45,15 @@ function compactMetrics(result: DrillResult): Record<string, unknown> {
   };
 }
 
-/** Builds the Tier 2 prompt. Never includes user ids or names. Throws on non-AI-safe wearable sources. */
-export function buildDebriefPrompt(input: DebriefInput): { system: string; user: string } {
+/**
+ * Builds the wire request for the server, which owns the prompt (SEC-5). Only numbers, enums,
+ * ISO dates and a bounded archetype name; never ids or names. Throws on non-AI-safe wearable sources.
+ */
+export function buildDebriefRequest(input: DebriefInput): DebriefRequest {
   assertAiSafeSources(input.wearables ?? []);
-
-  const system = [
-    PERSONA_VOICE[input.persona],
-    'You are a soccer coach giving a short spoken debrief after a drill.',
-    `Reply with 2 to 3 sentences, at most ${DEBRIEF_MAX_CHARS} characters in total, plain text only.`,
-    'Include exactly one concrete drill tip the player can try next session.',
-    'Never make medical claims or diagnose injuries, and never mention health conditions.',
-    'Do not ask for or mention personal information, names, or identifiers.',
-    'Use only the JSON data provided by the user message.',
-  ].join(' ');
-
-  const payload = {
+  return {
+    v: 2,
+    persona: input.persona,
     metrics: compactMetrics(input.result),
     ovr: { value: input.ovr.ovr, band: input.ovr.band, position: input.ovr.position, attributes: input.ovr.attributes },
     badges: input.badges.map((b) => b.id),
@@ -80,7 +70,6 @@ export function buildDebriefPrompt(input: DebriefInput): { system: string; user:
       strain: w.strain,
     })),
   };
-  return { system, user: JSON.stringify(payload) };
 }
 
 function truncateAtWord(text: string, max: number): string {

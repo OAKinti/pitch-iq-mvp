@@ -17,7 +17,9 @@ describe('OVRCardScreen', () => {
 
   it('renders every required testID from a simulated drill', async () => {
     await renderNavigator({ initialRoute: 'OVRCard', seed: [ball] });
-    await waitFor(() => expect(screen.getByTestId('debrief-text')).not.toHaveTextContent(/reviewing/));
+    await waitFor(() =>
+      expect(screen.getByTestId('debrief-text')).not.toHaveTextContent(/reviewing/),
+    );
     expect(screen.getByTestId('ovr-value').props.children).toMatch(/^\d{1,2}\.\d$/);
     expect(screen.getByTestId('ovr-band')).toBeTruthy();
     for (const key of ATTRIBUTE_KEYS) expect(screen.getByTestId(`attr-${key}`)).toBeTruthy();
@@ -30,13 +32,20 @@ describe('OVRCardScreen', () => {
   });
 
   it('shows the reviewing placeholder until the debrief arrives', async () => {
-    const never = { persona: 'captain', cue: jest.fn(), qa: {}, debrief: () => new Promise(() => undefined) };
+    const never = {
+      persona: 'captain',
+      cue: jest.fn(),
+      qa: {},
+      debrief: () => new Promise(() => undefined),
+    };
     await renderNavigator({
       initialRoute: 'OVRCard',
       seed: [ball],
       voiceCoach: never as never,
     });
-    expect(screen.getByTestId('debrief-text')).toHaveTextContent('Coach is reviewing your session…');
+    expect(screen.getByTestId('debrief-text')).toHaveTextContent(
+      'Coach is reviewing your session…',
+    );
   });
 });
 
@@ -60,7 +69,9 @@ describe('HighlightShareScreen', () => {
     if (m.drillType !== 'ball_mastery') throw new Error('unexpected');
     const w = selectPeakStreakWindow(m.touchTimestampsMs, m.durationMs);
     await waitFor(() => expect(screen.getByTestId('highlight-window')).toBeTruthy());
-    expect(screen.getByTestId('highlight-window')).toHaveTextContent(new RegExp(`${w.eventCount} touches`));
+    expect(screen.getByTestId('highlight-window')).toHaveTextContent(
+      new RegExp(`${w.eventCount} touches`),
+    );
     expect(screen.getByTestId('ffmpeg-command')).toHaveTextContent(/libx264/);
     expect(screen.getByTestId('ffmpeg-command')).toHaveTextContent(/faststart/);
     expect(screen.getByText('YUV420P')).toBeTruthy();
@@ -72,18 +83,25 @@ describe('HighlightShareScreen', () => {
   });
 
   it('builds share payloads without native calls', async () => {
-    await renderNavigator({ initialRoute: 'HighlightShare', seed: [ball] });
+    await renderNavigator({
+      initialRoute: 'HighlightShare',
+      seed: [ball],
+      initial: { ageBracket: 'adult_18_plus' },
+    });
     await fireEvent.press(screen.getByTestId('share-instagram_stories'));
-    expect(screen.getByTestId('share-summary')).toHaveTextContent(/instagram-stories:\/\/share/);
+    expect(screen.getByTestId('share-summary')).toHaveTextContent(/Instagram Stories/i);
     expect(screen.getByTestId('share-summary')).toHaveTextContent(/Native handoff ships Day 6/);
     await fireEvent.press(screen.getByTestId('share-instagram_reels'));
-    expect(screen.getByTestId('share-summary')).toHaveTextContent(/instagram-reels:\/\/share/);
+    expect(screen.getByTestId('share-summary')).toHaveTextContent(/Instagram Reels/i);
     await fireEvent.press(screen.getByTestId('share-tiktok'));
-    expect(screen.getByTestId('share-summary')).toHaveTextContent(/video · normal/);
+    expect(screen.getByTestId('share-summary')).toHaveTextContent(/TikTok/i);
   });
 
   it('degrades gracefully with no result', async () => {
-    await renderNavigator({ initialRoute: 'HighlightShare', initial: { consents: [CAMERA_CONSENT] } });
+    await renderNavigator({
+      initialRoute: 'HighlightShare',
+      initial: { consents: [CAMERA_CONSENT] },
+    });
     expect(screen.getByTestId('highlight-empty')).toBeTruthy();
     expect(screen.getByTestId('share-tiktok').props.accessibilityState.disabled).toBe(true);
   });

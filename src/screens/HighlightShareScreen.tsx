@@ -1,15 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { HudButton, HudPanel, NavBackButton, ScreenFrame, SectionLabel } from '../components';
+import { HudButton, HudPanel, NavBackButton, OvrSticker, ScreenFrame, SectionLabel } from '../components';
 import { useAppState } from '../state/AppStateContext';
 import { selectPeakStreakWindow } from '../domain';
 import {
   INSTAGRAM_EXPORT_SPEC,
   STICKER_SPEC,
   buildHighlightClipArgs,
-  buildInstagramReelsShare,
-  buildInstagramStoriesShare,
-  buildTikTokShareRequest,
+  getShareConfig,
   toFfmpegCommand,
 } from '../services';
 import type { DrillResult, HighlightWindow, ShareTarget } from '../types/contracts';
@@ -17,7 +15,6 @@ import { borders, colors, radii, spacing, typography } from '../theme/tokens';
 
 const INPUT_PATH = 'PitchIQ Drill.mp4';
 const OUTPUT_PATH = 'PitchIQ Highlight.mp4';
-const STICKER_PATH = 'PitchIQ Sticker.png';
 const MS_PER_SECOND = 1000;
 
 const TARGETS: readonly { id: ShareTarget; label: string }[] = [
@@ -46,9 +43,13 @@ function windowFor(result: DrillResult): HighlightWindow {
 const seconds = (ms: number): string => (ms / MS_PER_SECOND).toFixed(1);
 
 export function HighlightShareScreen() {
-  const { results } = useAppState();
-  const [summary, setSummary] = useState<{ target: ShareTarget; lines: string[] } | null>(null);
+  const { results, ovr, badges, ageBracket } = useAppState();
+  const [pressed, setPressed] = useState<ShareTarget | null>(null);
   const latest = results.length > 0 ? results[results.length - 1] : undefined;
+  const config = useMemo(() => getShareConfig(), []);
+  const locked = ageBracket === null || ageBracket === 'under_13';
+  const nativeConfigured = (target: ShareTarget): boolean =>
+    target === 'tiktok' ? config.tiktokClientKey !== null : config.facebookAppId !== null;
 
   const window = useMemo(() => (latest ? windowFor(latest) : null), [latest]);
   const command = useMemo(
@@ -60,26 +61,10 @@ export function HighlightShareScreen() {
   );
 
   const share = (target: ShareTarget) => {
-    const facebookAppId = process.env.EXPO_PUBLIC_FACEBOOK_APP_ID ?? 'demo-app-id';
-    if (target === 'tiktok') {
-      const req = buildTikTokShareRequest({
-        clientKey: process.env.EXPO_PUBLIC_TIKTOK_CLIENT_KEY ?? 'demo-client-key',
-        redirectUri: 'pitchiq://share-complete',
-        mediaPath: OUTPUT_PATH,
-      });
-      setSummary({
-        target,
-        lines: [`${req.mediaType} · ${req.shareFormat}`, `media: ${req.mediaPaths.join(', ')}`, `redirect: ${req.redirectUri}`],
-      });
-      return;
-    }
-    const build = target === 'instagram_stories' ? buildInstagramStoriesShare : buildInstagramReelsShare;
-    const payload = build({ facebookAppId, videoUri: OUTPUT_PATH, stickerUri: STICKER_PATH });
-    setSummary({
-      target,
-      lines: [payload.url, `pasteboard items: ${payload.pasteboardItems.length} · expires ${payload.expirationSeconds}s`],
-    });
+    if (locked) return;
+    setPressed(target);
   };
+  const pressedLabel = TARGETS.find((t) => t.id === pressed)?.label ?? '';
 
   return (
     <ScreenFrame testID="screen-highlight" kicker="Highlight export" title="Share your best streak">
@@ -115,6 +100,12 @@ export function HighlightShareScreen() {
         </>
       )}
 
+      {ovr ? (
+        <HudPanel title="Sticker">
+          <OvrSticker ovr={ovr} badges={badges} />
+        </HudPanel>
+      ) : null}
+
       <HudPanel title="Share to">
         {TARGETS.map((t) => (
           <HudButton
@@ -123,17 +114,20 @@ export function HighlightShareScreen() {
             label={t.label}
             variant={t.id === 'instagram_stories' ? 'primary' : 'secondary'}
             onPress={() => share(t.id)}
-            disabled={!latest}
+            disabled={!latest || locked}
           />
         ))}
-        {summary ? (
+        {locked ? (
+          <Text testID="share-age-locked" style={styles.body}>
+            Sharing is off for under-13 profiles.
+          </Text>
+        ) : null}
+        {pressed ? (
           <View testID="share-summary" style={styles.summary}>
-            <SectionLabel text={`Prepared · ${summary.target}`} tone="telemetry" />
-            {summary.lines.map((line) => (
-              <Text key={line} style={styles.code}>
-                {line}
-              </Text>
-            ))}
+            <SectionLabel text={`Prepared · ${pressedLabel}`} tone="telemetry" />
+            <Text style={styles.code}>
+              {nativeConfigured(pressed) ? 'native handoff configured' : 'OS share sheet fallback'}
+            </Text>
             <Text style={styles.body}>Native handoff ships Day 6 (dev build)</Text>
           </View>
         ) : null}

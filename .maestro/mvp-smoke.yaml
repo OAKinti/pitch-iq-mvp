@@ -40,6 +40,12 @@ name: PitchIQ MVP smoke
     id: drill-start
 - assertVisible:
     id: telemetry-phase
+- assertVisible:
+    id: skeleton-overlay
+- assertVisible:
+    id: pose-source
+- assertVisible:
+    id: telemetry-fps
 - extendedWaitUntil:
     visible:
       id: drill-view-results
