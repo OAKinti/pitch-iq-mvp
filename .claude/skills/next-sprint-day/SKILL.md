@@ -6,12 +6,12 @@ description: Resumable day-runner for the PitchIQ 7-day sprint. Invoke as /next-
 Use this skill whenever a session is asked to "continue the sprint", "run the next day" or `/next-sprint-day`. Never improvise tasks that are not in `SPRINT_STATE.md`.
 
 ## 1. Orient (read-only)
-1. Read `CLAUDE.md` and `SPRINT_STATE.md` in full. Run `git status` and `git log --oneline -5`. If the tree is dirty with someone else's work, stop and report it. Never stash or discard it.
-2. Parse the checklist top to bottom. Task lines match `^- \[( |x)\] (\[HUMAN GATE \d+\] )?(.*)$`. Lines tagged `[device]`, `[secret:NAME]` or `[local-only]` declare their requirements.
-3. **Blocking rule:** find the first unchecked task. If any unchecked `[HUMAN GATE N]` line comes before it, you are **blocked**. Print `BLOCKED by HUMAN GATE N: <text>`, make no code edits, and exit 0.
+1. Read `SPRINT_STATE.md` in full (`CLAUDE.md` is already loaded as project memory; do not re-read it). Run `git status` and `git log --oneline -5`. If the tree is dirty with someone else's work, stop and report it. Never stash or discard it.
+2. Parse each `## Track:` section of the checklist top to bottom (cloud routines: only `## Track: software`). Task lines match `^- \[( |x)\] (\[HUMAN GATE \d+\] )?(.*)$`. Lines tagged `[device]`, `[secret:NAME]` or `[local-only]` declare their requirements.
+3. **Blocking rule:** if an unchecked gate under `## Gates` exists, you are **blocked**. Otherwise, per track, find the first unchecked task; if an unchecked `[HUMAN GATE N]` line comes before it in the same track, that track is **blocked**. If every track you may run is blocked, you are **blocked**. Print `BLOCKED by HUMAN GATE N: <text>`, make no code edits, and exit 0.
 
 ## 2. Decide whether this session can run the task
-Stop cleanly and report (no edits, no empty commits) if the next task:
+Skip lines tagged `[human:A]`/`[human:B]` (a person owns them; agents never execute or tick them) and agent lines whose `after Dx` tasks are not all ticked on `main`; take the next runnable line in the track. Then stop cleanly and report (no edits, no empty commits) if the task you landed on:
 - is tagged `[device]` and no simulator or device is reachable (`adb devices`, `xcrun simctl list`, or a Maestro MCP tool) — this is always the case in cloud routines;
 - is tagged `[secret:NAME]` and `NAME` is not set in the environment. Check with `node -e "process.exit(process.env.NAME?0:1)"` and never print the value;
 - is tagged `[local-only]` and you are in a cloud container (`CLAUDE_CODE_REMOTE` set, or no Windows paths);
@@ -34,7 +34,7 @@ A cloud routine runs exactly **one** unblocked software task per invocation. A l
 3. Never claim simulator, Maestro or CAD results that you did not observe.
 
 ## 5. Commit & hand off
-1. Commit with conventional messages ending in the attribution trailer the session provides.
-2. `git push -u origin <claude/... branch>`. Never push `main`, never `--force`.
-3. Follow `sprint-handoff`: tick tasks, add the session log entry with exit codes, and name the next task.
+1. Follow `sprint-handoff` first: tick tasks, add the session log entry with exit codes, and name the next task.
+2. Commit the code and the handoff with conventional messages ending in the attribution trailer the session provides.
+3. `git push -u origin <claude/... branch>` once. Never push `main`, never `--force`.
 4. Final message: what ran, gate results, branch and SHA, and the next task or the gate that blocks it.

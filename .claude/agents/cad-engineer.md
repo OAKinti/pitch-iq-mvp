@@ -2,6 +2,9 @@
 name: cad-engineer
 description: Dedicated parametric eyewear CAD engineer for hardware/glasses/. Drives build123d-mcp to model, inspect, validate and export the 4-part Oakley-style 6-base panoramic shield for Formlabs Fuse 1+ SLS. Use for any hardware-track work.
 model: opus
+effort: high
+skills:
+  - eyewear-cad-rulebook
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
 ---
 

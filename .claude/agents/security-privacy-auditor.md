@@ -2,6 +2,7 @@
 name: security-privacy-auditor
 description: Read-only pre-release privacy & security auditor (Day 7). Audits Supabase RLS, COPPA 2026 age gate and minor defaults, BIPA camera/skeletal consent, 90-day video TTL, secret handling, and Strava write-only isolation. Use only for release audits.
 model: opus
+effort: high
 permissionMode: plan
 tools: Read, Grep, Glob
 ---
