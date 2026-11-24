@@ -13,8 +13,8 @@
 > Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 2–3. Wave 0 done (D2.0 + D6.0) on `claude/d2-0-prereq` (PR-A); waves 1–4 run on `claude/sprint-d2-d6` / `claude/sprint-d5-d7`.
-- **Next task:** wave 1 (D2.1a, D2.2a, D2.3a, D2.4a, D2.5a, D7.4a). Humans: Person A `eas build --profile development` from `claude/d2-0-prereq`; Person B D2.3 Supabase provisioning.
+- **Current day:** Day 2–3. Waves 0–2 done: PR-A `claude/d2-0-prereq` (D2.0, D6.0), PR-B `claude/sprint-d2-d6` (D2.1a–D2.5a, D2.2b, D4.1a, D4.2a, D6.1a, D6.2a, D7.4a). Waves 3–4 run on `claude/sprint-d5-d7`.
+- **Next task:** wave 3 D5.1a (Maestro flows + contrast tests), then wave 4 D7.2 release audit. Humans: Person A D2.1/D2.2 device checks (Dev Client from PR-A); Person B D2.3 → D2.4/D2.5 → D4.1.
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
@@ -28,7 +28,7 @@
 - [x] D2.3a after D2.0: Realtime rejoin - `subscribeToGroup` re-fetches members on every SUBSCRIBED; fake-channel tests; brief `.agenticverse/briefs/D2.3a.brief.md`
 - [x] D2.4a after D2.0: expo-audio `CuePlayer` (duckOthers, pre-warm, latest-wins) in `src/services/audio/` + `planCueClips` + `scripts/generate-cue-audio.ts --dry-run`; brief `.agenticverse/briefs/D2.4a.brief.md`
 - [x] D2.5a after D2.0: server-side debrief prompt (`supabase/functions/_shared/voiceCore.ts`, voice-debrief v2, voice-qa), client `buildDebriefRequest` + transport v2, pgTAP test for migration 003; brief `.agenticverse/briefs/D2.5a.brief.md`
-- [ ] D2.2b after D2.1a, D2.2a, D2.4a: wire PoseSource + SkeletonOverlay + CuePlayer into `useDrillRunner`/`CombineDrillScreen`/`AppStateContext`, services barrel, testIDs `skeleton-overlay`/`telemetry-fps`/`pose-source`; ui-qa-verifier pass; brief `.agenticverse/briefs/D2.2b.brief.md`
+- [x] D2.2b after D2.1a, D2.2a, D2.4a: wire PoseSource + SkeletonOverlay + CuePlayer into `useDrillRunner`/`CombineDrillScreen`/`AppStateContext`, services barrel, testIDs `skeleton-overlay`/`telemetry-fps`/`pose-source`; ui-qa-verifier pass; brief `.agenticverse/briefs/D2.2b.brief.md`
 - [ ] D2.1 [human:A] [device] Person A `feat/native-cv-camera`: right after D2.0 merges run `eas build --profile development` (android, then ios) and install the Dev Client; after D2.2b confirm live MediaPipe landmarks through `PoseSourceProvider`, landmarks 1–10 zeroed in a debug dump, permission-denied notice
 - [ ] D2.2 [human:A] [device] Person A: Skia skeleton overlay + framing HUD on a physical phone, front and back camera alignment; measure on-device FPS via `telemetry-fps` (target ≥ 24 over a 30 s Ball Mastery drill, DEV-1); paste numbers in the session log
 - [ ] D2.3 [human:B] [secret:EXPO_PUBLIC_SUPABASE_URL] Person B `feat/supabase-voice-polish`: create Supabase project, `supabase db push` migrations 001+002+003, enable pg_cron, `supabase test db` (pgTAP), set edge secrets, deploy `voice-debrief` + `voice-qa` + `purge-raw-video` (after D2.5a), switch app out of Demo Mode, Realtime group channel reaches SUBSCRIBED
@@ -37,12 +37,12 @@
 
 ### Day 4–7 agent work, pulled forward into the Agenticverse waves (briefs written by the wave-0 spec step)
 - [x] D6.0 Decision D-7 (no code): maintained 15 s highlight-clip encoder (D-4: upstream ffmpeg-kit retired) that shares the camera session with expo-mediapipe-pose or records via vision-camera 5.2.4 without mounting two sessions, plus view-shot and Instagram Stories / TikTok Share Kit handoff packages for the Expo SDK 58 dev client; every version checked with `npm view`; record D-7 PROPOSED with the exact install line
-- [ ] D4.1a after D2.5a: debrief usage telemetry (prompt/output tokens, TTS chars) returned by `voice-debrief` within contract v1.1.0 (else propose v1.2.0) + `scripts/debrief-cost-report.ts` comparing logged usage with `costModel.ts`; tests
-- [ ] D4.2a after D2.3a: two-client Group Session leaderboard convergence tests on fake Realtime channels (join, leave, rejoin, out-of-order and duplicate updates)
-- [ ] D6.1a after D6.0, D2.1a: highlight-clip service behind a library-agnostic `ClipEncoder` interface using the D-7 package (native module mocked) + `buildHighlightClipArgs` output checks for h264/aac/yuv420p/faststart; tests
-- [ ] D6.2a after D6.0: 640×480 transparent OVR sticker component + capture service (view-shot mocked) + Instagram Stories pasteboard / TikTok Share Kit handoff service using only the allowlisted `EXPO_PUBLIC_FACEBOOK_APP_ID` / `EXPO_PUBLIC_TIKTOK_CLIENT_KEY`; tests
+- [x] D4.1a after D2.5a: debrief usage telemetry (prompt/output tokens, TTS chars) returned by `voice-debrief` within contract v1.1.0 (else propose v1.2.0) + `scripts/debrief-cost-report.ts` comparing logged usage with `costModel.ts`; tests
+- [x] D4.2a after D2.3a: two-client Group Session leaderboard convergence tests on fake Realtime channels (join, leave, rejoin, out-of-order and duplicate updates)
+- [x] D6.1a after D6.0, D2.1a: highlight-clip service behind a library-agnostic `ClipEncoder` interface using the D-7 package (native module mocked) + `buildHighlightClipArgs` output checks for h264/aac/yuv420p/faststart; tests
+- [x] D6.2a after D6.0: 640×480 transparent OVR sticker component + capture service (view-shot mocked) + Instagram Stories pasteboard / TikTok Share Kit handoff service using only the allowlisted `EXPO_PUBLIC_FACEBOOK_APP_ID` / `EXPO_PUBLIC_TIKTOK_CLIENT_KEY`; tests
 - [ ] D5.1a after D2.2b, D6.2a: Maestro flows for the new testIDs (`skeleton-overlay`, `telemetry-fps`, `pose-source`, sticker/share) + WCAG contrast unit test over `src/theme/tokens.ts` dark/light pairs + reduce-motion fallbacks; tests
-- [ ] D7.4a after D2.0: EAS `production` profile, app.json store metadata (bundle IDs, versionCode/buildNumber, permission strings audit) and `docs/RELEASE_CHECKLIST.md` for TestFlight + Play Internal App Sharing
+- [x] D7.4a after D2.0: EAS `production` profile, app.json store metadata (bundle IDs, versionCode/buildNumber, permission strings audit) and `docs/RELEASE_CHECKLIST.md` for TestFlight + Play Internal App Sharing
 
 ### Day 4 — Wed Nov 25
 - [ ] D4.1 [human:B] [secret:EXPO_PUBLIC_SUPABASE_URL] after D4.1a, D2.3: Live Haiku 5.5 + ElevenLabs Flash debrief end-to-end; run `scripts/debrief-cost-report.ts`; log real cost per debrief vs `costModel.ts`
@@ -86,6 +86,8 @@
 ## Blockers
 - ~~B-1~~ Resolved Nov 22: owner created private repo `OAKinti/pitch-iq-mvp`; `main` is the default branch.
 - B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2; now HUMAN GATE 4, hardware only).
+- B-3 (Owner, non-blocking, defaults applied) Fable spec decisions: SEC-17 under-13 / unknown age ⇒ all sharing locked (`share-age-locked`); D7.4a `android.blockedPermissions` (media read, storage, location; never CAMERA/RECORD_AUDIO); TikTok iOS redirect URI needs a universal-link domain before D6.2.
+- B-4 (Person A, D6.1 follow-ups from wave-2 audit round 2, minor, no current trigger): `src/services/highlight/cameraMode.ts:75` settle the pending resolver before `emit()` in finishMount/onTimeout (CON-10); `src/services/highlight/highlightEncoderBinding.ts:85` reject echoed `durationMs <= 0` as `spec_mismatch` (FAIL-13). Known limit (D4.2a): Realtime publication carries only `group_session_results`, so roster joins/leaves reach other clients at the next result update.
 
 ## Contract changes
 - v1.0.0 frozen Nov 22.
@@ -99,6 +101,10 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-24 — local (Opus 5.5, Agenticverse waves 1–2) — claude/sprint-d2-d6
+- Did: Fable spec step (49 clauses, briefs D4.1a/D4.2a/D6.1a/D6.2a/D5.1a/D7.4a). Sonnet vertical-builders, 2 at a time, disjoint paths, orchestrator commits + barrels: D2.1a pose source, D2.2a skeleton + Skia overlay, D2.3a Realtime rejoin, D2.4a CuePlayer + cue CLI, D2.5a server-side debrief + voice-qa + pgTAP, D7.4a release config, D2.2b Combine wiring, D4.1a usage telemetry + cost report, D4.2a leaderboard convergence, D6.1a ClipEncoder + camera-mode controller, D6.2a sticker + share handoff.
+- Verified: `npm run verify` → 0 (44 suites, 393 tests, coverage 99.48/98.36/100/99.83, lint:tokens 0, compliance 16/16); `npx expo export --platform android` → 0 and `--platform ios` → 0 with `modules/*` absent (lazy requires in try/catch are Metro optional deps); ui-qa-verifier PASS (no Maestro run, no device). Cross-audits: wave 1 PASS after 2 minor fixes; wave 2 round 1 FAIL (REC-1 stall teardown, iOS inactive reset, CON-9 timer, wrapped log parse, cp1252 bytes) → fixed with regression tests → round 2 PASS (2 minor → B-4).
+- Next: wave 3 D5.1a on `claude/sprint-d5-d7`. `deno check` and the pgTAP file are not run here (Person B, D2.3).
 ### 2026-11-24 — local (Opus 5.5, Agenticverse wave 0) — claude/d2-0-prereq
 - Did: owner confirmed HUMAN GATE 1 (tick carried into this branch). D6.0: Gemini research → D-7 recorded, versions checked with `npm view`, owner ACCEPTED and folded the D-7 packages into D2.0. D2.0: native deps, app.json plugins (explicit permission strings; the `expo-mediapipe-pose` plugin would otherwise overwrite the BIPA camera text), `eas.json`, jest mocks, contract v1.1.0 + migration 003. Added `expo-asset` (expo-audio peer, flagged by expo-doctor). Expo pinned `react-native-view-shot` 6.1.1.
 - Verified: `npm run verify` → 0 (17 suites, 184 tests, 16/16 compliance); `npm run test:hooks` → 0; `npx expo-doctor` → 0 (20/20); `npx expo export --platform android` → 0; `--platform ios` → 0. Cross-family audit (Gemini Neon) PASS, 0 findings.
