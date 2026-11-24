@@ -77,6 +77,25 @@ describe('cameraMode', () => {
     expect(seen.map((s) => s.mounted)).toEqual(['pose', 'none', 'record']);
   });
 
+  it('CON-9: a subscriber that acks the unmount synchronously inside emit leaves exactly one timer', async () => {
+    const f = fakeClock();
+    const c = createCameraModeController({ clock: f.clock });
+    await c.request('pose');
+    const unsub = c.subscribe((s) => {
+      if (s.switching && s.mounted === 'none') c.notifyUnmounted('pose'); // native view unmounts in the same tick
+    });
+    const p = c.request('record');
+    expect(f.pending()).toBe(1); // only finishMount; the timeout was cleared, not orphaned
+    f.advance(CAMERA_TEARDOWN_MS);
+    await expect(p).resolves.toEqual({
+      ok: true,
+      state: { mode: 'record', mounted: 'record', switching: false },
+    });
+    f.advance(CAMERA_TEARDOWN_TIMEOUT_MS * 2);
+    expect(c.getState()).toEqual({ mode: 'record', mounted: 'record', switching: false }); // no late timeout
+    unsub();
+  });
+
   it('record to idle also tears down and ignores ack when not switching', async () => {
     const f = fakeClock();
     const c = createCameraModeController({ clock: f.clock });

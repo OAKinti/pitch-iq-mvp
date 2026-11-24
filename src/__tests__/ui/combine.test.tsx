@@ -21,7 +21,9 @@ jest.mock('../../services/cv/poseSource', () => {
 jest.mock('../../services/cv/MediapipePoseView', () => {
   const { View: MockView } = jest.requireActual('react-native');
   const ReactLib = jest.requireActual('react');
-  return { MediapipePoseView: () => ReactLib.createElement(MockView, { testID: 'mediapipe-view-stub' }) };
+  return {
+    MediapipePoseView: () => ReactLib.createElement(MockView, { testID: 'mediapipe-view-stub' }),
+  };
 });
 
 function fakeCuePlayer(): jest.Mocked<CuePlayer> {
@@ -34,7 +36,8 @@ function fakeCuePlayer(): jest.Mocked<CuePlayer> {
   };
 }
 
-const isDisabled = (id: string): boolean => Boolean(screen.getByTestId(id).props.accessibilityState?.disabled);
+const isDisabled = (id: string): boolean =>
+  Boolean(screen.getByTestId(id).props.accessibilityState?.disabled);
 
 async function advance(totalMs: number, chunkMs = 1000) {
   for (let t = 0; t < totalMs; t += chunkMs) {
@@ -62,7 +65,9 @@ describe('CombineDrillScreen', () => {
 
   it('simulate OFF shows the Dev Client notice instead of starting', async () => {
     await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] } });
-    expect(screen.getByTestId('simulate-toggle').props.accessibilityState).toEqual({ checked: false });
+    expect(screen.getByTestId('simulate-toggle').props.accessibilityState).toEqual({
+      checked: false,
+    });
     await fireEvent.press(screen.getByTestId('drill-start'));
     expect(screen.getByTestId('drill-notice')).toHaveTextContent(/Dev Client build/);
     expect(screen.getByTestId('telemetry-phase')).toHaveTextContent('IDLE');
@@ -123,7 +128,10 @@ describe('CombineDrillScreen', () => {
   });
 
   it('stops the timer loop on unmount', async () => {
-    const view = await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] } });
+    const view = await renderNavigator({
+      initialRoute: 'Combine',
+      initial: { consents: [CAMERA_CONSENT] },
+    });
     await fireEvent.press(screen.getByTestId('simulate-toggle'));
     await fireEvent.press(screen.getByTestId('drill-start'));
     await advance(1000);
@@ -135,7 +143,11 @@ describe('CombineDrillScreen', () => {
 
   it('shows telemetry-fps and pose-source MOCK, mounting no MediapipePoseView for mock source', async () => {
     const player = fakeCuePlayer();
-    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] }, cuePlayer: player });
+    await renderNavigator({
+      initialRoute: 'Combine',
+      initial: { consents: [CAMERA_CONSENT] },
+      cuePlayer: player,
+    });
     expect(screen.getByTestId('pose-source')).not.toHaveTextContent('MOCK');
     await fireEvent.press(screen.getByTestId('simulate-toggle'));
     await fireEvent.press(screen.getByTestId('drill-start'));
@@ -165,12 +177,19 @@ describe('CombineDrillScreen', () => {
   it('background resets an active drill and stops cues', async () => {
     let handler: ((s: string) => void) | undefined;
     const remove = jest.fn();
-    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _: string,
+      h: (s: string) => void,
+    ) => {
       handler = h;
       return { remove };
     }) as never);
     const player = fakeCuePlayer();
-    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] }, cuePlayer: player });
+    await renderNavigator({
+      initialRoute: 'Combine',
+      initial: { consents: [CAMERA_CONSENT] },
+      cuePlayer: player,
+    });
     await fireEvent.press(screen.getByTestId('simulate-toggle'));
     await fireEvent.press(screen.getByTestId('drill-start'));
     await advance(3000);
@@ -186,6 +205,35 @@ describe('CombineDrillScreen', () => {
 
     await act(async () => handler?.('active'));
     expect(player.reassertAudioMode).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("REC-2: iOS 'inactive' (permission prompt, banner) does not cancel an active drill", async () => {
+    let handler: ((s: string) => void) | undefined;
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((
+      _: string,
+      h: (s: string) => void,
+    ) => {
+      handler = h;
+      return { remove: jest.fn() };
+    }) as never);
+    const player = fakeCuePlayer();
+    await renderNavigator({
+      initialRoute: 'Combine',
+      initial: { consents: [CAMERA_CONSENT] },
+      cuePlayer: player,
+    });
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    await fireEvent.press(screen.getByTestId('drill-start'));
+    await advance(3000);
+    expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
+
+    await act(async () => handler?.('inactive'));
+    expect(player.stopAll).not.toHaveBeenCalled();
+    expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
+    expect(screen.queryByTestId('drill-notice')).toBeNull();
+    await act(async () => handler?.('active'));
+    expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
     spy.mockRestore();
   });
 

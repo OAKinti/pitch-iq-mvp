@@ -242,6 +242,13 @@ describe('parseUsageLogLine', () => {
     const escaped = bare.split('"').join('\\"');
     expect(parseUsageLogLine(escaped)).toEqual(r);
     expect(parseUsageLogLine(`"event_message":"${escaped}"`)).toEqual(r);
+    // Supabase log export: the record is a JSON string inside an outer object.
+    const wrapped = JSON.stringify({
+      event_message: bare,
+      timestamp: 1732442400000,
+      metadata: [{ level: 'info' }],
+    });
+    expect(parseUsageLogLine(wrapped)).toEqual(r);
   });
 
   it('parseUsageLogLine rejects extra keys, wrong types and out-of-range values', () => {

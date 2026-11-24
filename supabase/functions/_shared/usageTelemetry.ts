@@ -86,6 +86,10 @@ export function parseUsageLogLine(line: string): DebriefUsageRecord | null {
     const slice = line.slice(start, end + 1);
     const candidates = [slice];
     if (slice.includes('\\"')) candidates.push(slice.split('\\"').join('"'));
+    // A JSON-wrapped log export ({"event_message":"{\"evt\":\"debrief_usage\",...}"}) has an
+    // outer object; the usage record itself is flat (no nested braces), so locate it directly.
+    const inner = /\{\\?"evt\\?"\s*:\s*\\?"debrief_usage\\?"[^{}]*\}/.exec(line);
+    if (inner) candidates.push(inner[0].split('\\"').join('"'));
     for (const c of candidates) {
       try {
         const rec = validRecord(JSON.parse(c));

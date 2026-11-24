@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { HudButton, HudPanel, HudToggle, NavBackButton, OptionChip, ScreenFrame, SectionLabel, TelemetryReadout } from '../components';
+import {
+  HudButton,
+  HudPanel,
+  HudToggle,
+  NavBackButton,
+  OptionChip,
+  ScreenFrame,
+  SectionLabel,
+  TelemetryReadout,
+} from '../components';
 import { useNavigation } from '../navigation/NavigationContext';
 import { useAppState } from '../state/AppStateContext';
 import { useDrillRunner } from '../state/useDrillRunner';
@@ -19,11 +28,14 @@ const BACKGROUND_NOTICE = 'Drill cancelled because the app left the foreground. 
 
 const SOURCE_NOTICES: Record<string, string> = {
   consent_missing: 'Motion-tracking consent is required before any drill.',
-  native_unavailable: 'Live camera needs the Dev Client build (Day 2–3) — enable Simulate Live Drill',
-  parent_locked: 'Live camera stays locked until a parent verifies. Enable Simulate Live Drill to practice.',
-  permission_denied: 'Camera permission was denied. Allow camera access in Settings to run a live drill.',
+  native_unavailable:
+    'Live camera needs the Dev Client build (Day 2â€“3) â€” enable Simulate Live Drill',
+  parent_locked:
+    'Live camera stays locked until a parent verifies. Enable Simulate Live Drill to practice.',
+  permission_denied:
+    'Camera permission was denied. Allow camera access in Settings to run a live drill.',
   camera_error: 'The camera failed. Close other camera apps and start the drill again.',
-  stalled: 'Pose tracking stalled. Check the framing and start the drill again.',
+  stalled: 'Pose tracking paused. Step back into frame and it resumes automatically.',
 };
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
@@ -99,7 +111,8 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
   const rate = snapshot?.liveRate ?? 0;
   const quality = snapshot?.framingQuality ?? 0;
   const phase = snapshot ? snapshot.phase : 'idle';
-  const shownNotice = notice ?? (runner.sourceError ? (SOURCE_NOTICES[runner.sourceError] ?? null) : null);
+  const shownNotice =
+    notice ?? (runner.sourceError ? (SOURCE_NOTICES[runner.sourceError] ?? null) : null);
   const cueText = latestCue ? app.voiceCoach.cue(latestCue).text : 'Awaiting cue';
 
   return (
@@ -119,18 +132,31 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
         ))}
       </View>
 
-      <HudToggle testID="simulate-toggle" label="Simulate Live Drill" value={simulate} onChange={changeSimulate} />
+      <HudToggle
+        testID="simulate-toggle"
+        label="Simulate Live Drill"
+        value={simulate}
+        onChange={changeSimulate}
+      />
 
       <View testID="drill-stage" style={styles.stage}>
         {sourceKind === 'mediapipe' && provider && running ? (
-          <MediapipePoseView provider={provider} active facing="front" style={StyleSheet.absoluteFill} />
+          <MediapipePoseView
+            provider={provider}
+            active
+            facing="front"
+            style={StyleSheet.absoluteFill}
+          />
         ) : null}
         <SkeletonOverlay frame={latestFrame} mirrored={sourceKind === 'mediapipe'} />
         {!latestFrame ? <Text style={styles.stageHint}>Skeleton joints appear here</Text> : null}
       </View>
 
       <View style={styles.framing}>
-        <SectionLabel text={`Framing ${Math.round(quality * 100)}%`} tone={quality < MIN_FRAMING_QUALITY && snapshot ? 'warning' : 'muted'} />
+        <SectionLabel
+          text={`Framing ${Math.round(quality * 100)}%`}
+          tone={quality < MIN_FRAMING_QUALITY && snapshot ? 'warning' : 'muted'}
+        />
         <View style={styles.framingTrack}>
           <View testID="framing-bar" style={[styles.framingFill, { width: `${quality * 100}%` }]} />
         </View>
@@ -139,20 +165,33 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
       <HudPanel title="Telemetry" accent={phase === 'active'}>
         <View style={styles.wrapRow}>
           <TelemetryReadout testID="telemetry-phase" label="Phase" value={phase.toUpperCase()} />
-          <TelemetryReadout testID="telemetry-count" label={isBall ? 'Touches' : 'Legs'} value={String(count)} />
+          <TelemetryReadout
+            testID="telemetry-count"
+            label={isBall ? 'Touches' : 'Legs'}
+            value={String(count)}
+          />
           <TelemetryReadout
             testID="telemetry-rate"
             label="Rate"
             value={isBall ? String(Math.round(rate)) : rate.toFixed(1)}
             unit={isBall ? 'touch/min' : 'm/s'}
           />
-          <TelemetryReadout testID="telemetry-fps" label="FPS" value={String(Math.round(runner.fps))} />
+          <TelemetryReadout
+            testID="telemetry-fps"
+            label="FPS"
+            value={String(Math.round(runner.fps))}
+          />
           <TelemetryReadout
             testID="pose-source"
             label="Source"
-            value={sourceKind === 'mediapipe' ? 'LIVE' : sourceKind === 'mock' ? 'MOCK' : '—'}
+            value={sourceKind === 'mediapipe' ? 'LIVE' : sourceKind === 'mock' ? 'MOCK' : 'â€”'}
           />
-          <TelemetryReadout testID="telemetry-timer" label="Timer" value={formatTimer(snapshot?.elapsedMs ?? 0)} tone="accent" />
+          <TelemetryReadout
+            testID="telemetry-timer"
+            label="Timer"
+            value={formatTimer(snapshot?.elapsedMs ?? 0)}
+            tone="accent"
+          />
         </View>
         <Text testID="cue-caption" style={styles.cue}>
           {cueText}
@@ -173,7 +212,12 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
       {metricsDone ? (
         <HudButton testID="drill-view-results" label="View results" onPress={viewResults} />
       ) : (
-        <HudButton testID="drill-start" label={running ? 'Drill running' : 'Start drill'} onPress={start} disabled={!hasConsent || running} />
+        <HudButton
+          testID="drill-start"
+          label={running ? 'Drill running' : 'Start drill'}
+          onPress={start}
+          disabled={!hasConsent || running}
+        />
       )}
     </ScreenFrame>
   );

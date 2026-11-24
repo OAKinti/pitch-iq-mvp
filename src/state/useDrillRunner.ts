@@ -125,6 +125,8 @@ export function useDrillRunner(drillType: DrillType, opts: DrillRunnerOptions): 
     src.start(
       (frame) => {
         if (active.current !== src) return;
+        // REC-1: the next valid frame clears a stall (other errors already tore the source down).
+        setSourceError((prev) => (prev === 'stalled' ? null : prev));
         const snap = eng.push(frame);
         setFps(fpsMeter.push(frame.timestampMs));
         setLatestFrame(frame);
@@ -150,6 +152,11 @@ export function useDrillRunner(drillType: DrillType, opts: DrillRunnerOptions): 
       },
       (error) => {
         if (active.current !== src) return;
+        if (error === 'stalled') {
+          // REC-1: a stall is recoverable - keep the provider and engine, just surface the notice.
+          setSourceError('stalled');
+          return;
+        }
         teardown();
         setRunning(false);
         setSourceError(error);

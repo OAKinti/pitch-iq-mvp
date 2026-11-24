@@ -115,8 +115,10 @@ export function createCameraModeController(opts?: {
         tearingDown = state.mounted;
         acked = false;
         pending = resolve;
-        emit({ mode: 'idle', mounted: 'none', switching: true });
+        // CON-9: arm the timeout BEFORE emitting, so a subscriber that synchronously calls
+        // notifyUnmounted() inside emit() clears this timer instead of having it overwrite finishMount.
         timer = clock.setTimeout(onTimeout, timeoutMs);
+        emit({ mode: 'idle', mounted: 'none', switching: true });
       });
     },
     notifyUnmounted(kind) {

@@ -1,5 +1,13 @@
 import { AppState as RNAppState } from 'react-native';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   CONSENT_POLICY_VERSION,
   type AgeBracket,
@@ -93,7 +101,10 @@ export function AppStateProvider({
   initial,
 }: AppStateProviderProps) {
   const config = useMemo(() => configOverride ?? getAppConfig(), [configOverride]);
-  const repository = useMemo(() => repositoryOverride ?? createRepository(config), [repositoryOverride, config]);
+  const repository = useMemo(
+    () => repositoryOverride ?? createRepository(config),
+    [repositoryOverride, config],
+  );
   const now = useMemo(() => nowOverride ?? (() => new Date()), [nowOverride]);
 
   const [ageBracket, setAgeBracket] = useState<AgeBracket | null>(initial?.ageBracket ?? null);
@@ -109,7 +120,10 @@ export function AppStateProvider({
   const voiceCoach = useMemo(() => {
     if (voiceCoachOverride) return voiceCoachOverride;
     const client = getSupabaseClient(config);
-    return createVoiceCoach({ persona, transport: client ? createEdgeFunctionTransport(client) : null });
+    return createVoiceCoach({
+      persona,
+      transport: client ? createEdgeFunctionTransport(client) : null,
+    });
   }, [voiceCoachOverride, persona, config]);
 
   const cuePlayer = useMemo(
@@ -133,7 +147,9 @@ export function AppStateProvider({
     const sub = RNAppState.addEventListener('change', (status) => {
       if (status === 'active') {
         cuePlayer.reassertAudioMode().catch(() => undefined);
-      } else {
+      } else if (status === 'background') {
+        // REC-2: only a real background resets the drill. iOS 'inactive' (permission prompt,
+        // notification banner, control centre) must not cancel a starting live drill.
         cuePlayer.stopAll();
         setBackgroundTick((n) => n + 1);
       }
@@ -226,7 +242,28 @@ export function AppStateProvider({
       setPosition,
       completeDrill,
     }),
-    [ageBracket, persona, position, consents, results, ovr, badges, archetypes, debrief, config, repository, voiceCoach, cuePlayer, backgroundTick, now, setAge, grantConsent, setPersona, setPosition, completeDrill],
+    [
+      ageBracket,
+      persona,
+      position,
+      consents,
+      results,
+      ovr,
+      badges,
+      archetypes,
+      debrief,
+      config,
+      repository,
+      voiceCoach,
+      cuePlayer,
+      backgroundTick,
+      now,
+      setAge,
+      grantConsent,
+      setPersona,
+      setPosition,
+      completeDrill,
+    ],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
