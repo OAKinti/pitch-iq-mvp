@@ -7,8 +7,13 @@ node_modules/
 !.env.example
 .claude/settings.local.json
 
-# Claude Code worktrees (vertical-builder subagents)
+# Claude Code worktrees
 .claude/worktrees/
+
+# Agenticverse: commit the handoff files people and sessions share; keep audits, bench runs and state local
+.agenticverse/*
+!.agenticverse/briefs/
+!.agenticverse/sprint_contract.json
 
 # Expo / Metro / build caches
 .expo/

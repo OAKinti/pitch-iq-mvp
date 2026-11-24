@@ -19,9 +19,9 @@ Skip lines tagged `[human:A]`/`[human:B]` (a person owns them; agents never exec
 A cloud routine runs exactly **one** unblocked software task per invocation. A local session may continue through the day's tasks.
 
 ## 3. Execute
-1. Branch from the latest `main`: `git checkout main && git pull --ff-only && git checkout -b claude/<day>-<slug>`. Reuse the day branch if it already exists.
+1. Branch from the latest `main`: `git checkout main && git pull --ff-only && git checkout -b claude/<day>-<slug>`. Use the branch name the caller gives instead, if any (Routine 1: `claude/nightly-<YYYY-MM-DD>`). Reuse the branch if it already exists.
 2. Route the work:
-   - Software feature work goes to one `vertical-builder` per non-overlapping slice. Run them in parallel worktrees when the tasks touch disjoint directories. Give each builder its directories, the contract section, and the gates.
+   - Software feature work goes to one `vertical-builder` per non-overlapping slice. Builders share this working tree. Run at most 2 in parallel, and only when their write paths are disjoint. Give each builder its brief, its exact write paths and the gates, then commit each slice's paths yourself (`git add <paths>`). Multi-task local runs follow `docs/AGENTICVERSE_SPRINT.md`.
    - Exploration and log triage go to `code-scout`.
    - Hardware goes to `cad-engineer` with the `eyewear-cad-rulebook` skill.
    - Day 7 release audit goes to `security-privacy-auditor` (read-only).
@@ -29,8 +29,8 @@ A cloud routine runs exactly **one** unblocked software task per invocation. A l
 4. Domain math must follow `soccer-cv-math`, and UI must follow `design-tokens`. If a frozen contract must change, change `docs/INTERFACE_CONTRACTS.md` and `CONTRACT_VERSION` in the same commit, and log it under *Decisions*.
 
 ## 4. Verify (mandatory, real commands)
-1. `npm run verify`, which runs typecheck, test (with coverage thresholds), lint:tokens and check:compliance. All must exit 0.
-2. Run `ui-qa-verifier` for any UI or compliance-relevant change. Include its PASS/FAIL table in the handoff.
+1. Run `npm run verify` (typecheck, test with coverage thresholds, lint:tokens, check:compliance) **once, after the last code change**. All must exit 0. Builders' scoped jest runs do not replace it, and this run does not need repeating unless code changes again.
+2. Run `ui-qa-verifier` only for UI or compliance-relevant changes. Hand it this session's verify output to reuse instead of re-running, and include its PASS/FAIL table in the handoff.
 3. Never claim simulator, Maestro or CAD results that you did not observe.
 
 ## 5. Commit & hand off

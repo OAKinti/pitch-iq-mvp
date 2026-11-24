@@ -4,8 +4,12 @@ Anthropic renamed **Routines** to **scheduled tasks**. They are still managed at
 [claude.ai/code/routines](https://claude.ai/code/routines) or with `/schedule` (alias `/routines`) in the CLI.
 The feature is a research preview, so labels may shift; this guide was checked against the docs on Nov 22 2026.
 Each run is a full Claude Code cloud session on a fresh clone. The repo's committed `CLAUDE.md`,
-`.claude/skills/`, `.claude/agents/`, `.claude/settings.json` hooks and `.mcp.json` all load
-automatically, which is why only this one repo should be attached.
+`.claude/skills/`, `.claude/agents/` and `.claude/settings.json` hooks all load
+automatically, which is why only this one repo should be attached. There is no project `.mcp.json`; the CAD server is registered per machine (`docs/MCP_SETUP.md`).
+
+> **Since Nov 24 the main engine is the local Agenticverse wave run (`docs/AGENTICVERSE_SPRINT.md`).** Routine 1 is a backstop.
+> Keep it **paused** while a wave run is active, because it reads `main` and would rebuild tasks that are in flight on a `claude/sprint-*` branch.
+> Turn it back on between wave runs, or once only one-task-a-night work is left. Routine 2 (gatekeeper) stays on all the time.
 
 ## 5-minute setup checklist
 

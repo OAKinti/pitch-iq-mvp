@@ -8,19 +8,21 @@
 > workstation/MCP · `[secret:NAME]` needs env var NAME. Only humans tick HUMAN GATE lines. Day 1 history:
 > `docs/SPRINT_LOG.md`.
 > `[human:A]` / `[human:B]` = owned by Person A/B; agents and cloud routines skip the line (never execute or tick it).
-> An agent line containing `after Dx.y[, Dx.z]` is blocked until every named task is ticked on `main`; skip to the next runnable line.
+> An agent line containing `after Dx.y[, Dx.z]` is blocked until every named task is ticked on `main` — or, in a local
+> Agenticverse wave run (`docs/AGENTICVERSE_SPRINT.md`), merged into that run's `claude/sprint-*` integration branch; skip to the next runnable line.
+> Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 1 complete — waiting at HUMAN GATE 1
-- **Next task:** HUMAN GATE 1 — review and merge PR `claude/day-1-mvp` → `main` on GitHub
+- **Current day:** Day 1 merged to `main` (PR #1, Nov 23). Day 2–7 agent work runs as combined Agenticverse waves.
+- **Next task:** HUMAN GATE 1, then `docs/AGENTICVERSE_SPRINT.md` wave 0 (D2.0 + D6.0)
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
-- [ ] [HUMAN GATE 1] Owner: merge `claude/day-1-mvp` → `main` on GitHub; activate both routines per `docs/CLOUD_ROUTINES_SETUP.md`; send repo to collaborator; install `uv` and confirm `uv tool run --python 3.12 build123d-mcp@latest --version` works; decide shield base curve (see Decisions D-3)
+- [ ] [HUMAN GATE 1] Owner: PR #1 merged (done Nov 23); send repo to collaborator; activate Routine 2 (gatekeeper) per `docs/CLOUD_ROUTINES_SETUP.md`; keep Routine 1 paused while a local Agenticverse wave run is active (it would build the same tasks twice)
 
 ## Track: software
 ### Day 2–3 — Mon–Tue Nov 23–24
-- [ ] D2.0 [human:A] Prereq PR `feat/d2-0-prereq` (Person A accepts D-5, Person B accepts D-6): `npx expo install expo-dev-client expo-build-properties expo-audio @shopify/react-native-skia react-native-svg expo-mediapipe-pose@0.5.2`; app.json plugins (dev-client, build-properties android minSdkVersion 26, expo-audio no record/background); `eas.json` development profile; jest.setup.js mocks (skia, expo-audio, expo-mediapipe-pose); contract v1.1.0 (DebriefRequest/Response types, migration 003 quota RPCs, INTERFACE_CONTRACTS, CONTRACT_VERSION); CLAUDE.md CV-slice row; `[human:*]`/`after` parse rules; verify + expo-doctor + export android/ios
+- [ ] D2.0 Prereq on `claude/d2-0-prereq`, own PR, human-merged (D-5, D-6 accepted Nov 24): `npx expo install expo-dev-client expo-build-properties expo-audio @shopify/react-native-skia react-native-svg expo-mediapipe-pose@0.5.2` (+ D-7 packages if accepted before this PR opens); app.json plugins (dev-client, build-properties android minSdkVersion 26, expo-audio no record/background); `eas.json` development + production profiles; jest.setup.js mocks (skia, expo-audio, expo-mediapipe-pose); contract v1.1.0 (DebriefRequest/Response types, migration 003 quota RPCs, INTERFACE_CONTRACTS, CONTRACT_VERSION); CLAUDE.md CV-slice row; verify + expo-doctor + export android/ios; brief `.agenticverse/briefs/D2.0.brief.md`
 - [ ] D2.1a after D2.0: `PoseSourceProvider` in `src/services/cv/` (toPoseFrame + sanitize, mock + mediapipe providers, selectPoseSource, stall watchdog, FpsMeter, lazy mediapipe binding + `MediapipePoseView`) with tests; brief `.agenticverse/briefs/D2.1a.brief.md`
 - [ ] D2.2a after D2.0: `projectSkeleton` in `src/domain/pose/` (100 % coverage) + Skia `SkeletonOverlay` (+ web fallback) in `src/components/`; brief `.agenticverse/briefs/D2.2a.brief.md`
 - [ ] D2.3a after D2.0: Realtime rejoin - `subscribeToGroup` re-fetches members on every SUBSCRIBED; fake-channel tests; brief `.agenticverse/briefs/D2.3a.brief.md`
@@ -33,26 +35,36 @@
 - [ ] D2.4 [human:B] [local-only] [secret:ELEVENLABS_API_KEY] Person B: after D2.4a run `npx --yes tsx scripts/generate-cue-audio.ts` → 39 cached cue clips (13 cues × 3 personas) in `assets/audio/cues/` + regenerated `src/services/audio/cueSources.ts`; listen-check ducking on a device
 - [ ] D2.5 [human:B] [secret:EXPO_PUBLIC_SUPABASE_URL] Person B: after D2.3 run live DEV-2 checks on the deployed functions (legacy `{system,user}` body → 400, strava wearable → 400, monthly-cap refusal, `voice-qa` grants 0 at cap) and approve the server prompt wording
 
+### Day 4–7 agent work, pulled forward into the Agenticverse waves (briefs written by the wave-0 spec step)
+- [ ] D6.0 Decision D-7 (no code): maintained 15 s highlight-clip encoder (D-4: upstream ffmpeg-kit retired) that shares the camera session with expo-mediapipe-pose or records via vision-camera 5.2.4 without mounting two sessions, plus view-shot and Instagram Stories / TikTok Share Kit handoff packages for the Expo SDK 58 dev client; every version checked with `npm view`; record D-7 PROPOSED with the exact install line
+- [ ] D4.1a after D2.5a: debrief usage telemetry (prompt/output tokens, TTS chars) returned by `voice-debrief` within contract v1.1.0 (else propose v1.2.0) + `scripts/debrief-cost-report.ts` comparing logged usage with `costModel.ts`; tests
+- [ ] D4.2a after D2.3a: two-client Group Session leaderboard convergence tests on fake Realtime channels (join, leave, rejoin, out-of-order and duplicate updates)
+- [ ] D6.1a after D6.0, D2.1a: highlight-clip service behind a library-agnostic `ClipEncoder` interface using the D-7 package (native module mocked) + `buildHighlightClipArgs` output checks for h264/aac/yuv420p/faststart; tests
+- [ ] D6.2a after D6.0: 640×480 transparent OVR sticker component + capture service (view-shot mocked) + Instagram Stories pasteboard / TikTok Share Kit handoff service using only the allowlisted `EXPO_PUBLIC_FACEBOOK_APP_ID` / `EXPO_PUBLIC_TIKTOK_CLIENT_KEY`; tests
+- [ ] D5.1a after D2.2b, D6.2a: Maestro flows for the new testIDs (`skeleton-overlay`, `telemetry-fps`, `pose-source`, sticker/share) + WCAG contrast unit test over `src/theme/tokens.ts` dark/light pairs + reduce-motion fallbacks; tests
+- [ ] D7.4a after D2.0: EAS `production` profile, app.json store metadata (bundle IDs, versionCode/buildNumber, permission strings audit) and `docs/RELEASE_CHECKLIST.md` for TestFlight + Play Internal App Sharing
+
 ### Day 4 — Wed Nov 25
-- [ ] D4.1 [secret:EXPO_PUBLIC_SUPABASE_URL] Live Haiku 5.5 + ElevenLabs Flash debrief end-to-end; log real cost per debrief vs `costModel.ts`
-- [ ] D4.2 [device] Two-device Group Session leaderboard sync test (Realtime)
+- [ ] D4.1 [human:B] [secret:EXPO_PUBLIC_SUPABASE_URL] after D4.1a, D2.3: Live Haiku 5.5 + ElevenLabs Flash debrief end-to-end; run `scripts/debrief-cost-report.ts`; log real cost per debrief vs `costModel.ts`
+- [ ] D4.2 [human:A] [device] after D4.2a, D2.3: Two-device Group Session leaderboard sync test (Realtime)
 
 ### Day 5 — Thu Nov 26 (Thanksgiving, light)
-- [ ] D5.1 [device] `ui-qa-verifier` + Maestro MCP smoke on simulator: spacing, dark-mode contrast, Reanimated transitions, audio ducking; fix visual defects
+- [ ] D5.1 [human:A] [device] after D5.1a: `ui-qa-verifier` + Maestro MCP smoke on simulator: spacing, dark-mode contrast, Reanimated transitions, audio ducking; fix visual defects
 
 ### Day 6 — Fri Nov 27
-- [ ] D6.1 [device] Native `ffmpeg-kit` 15 s peak-streak clip (`-movflags +faststart`) using `buildHighlightClipArgs`; verify output with `ffprobe` (h264/aac/yuv420p/progressive/faststart)
-- [ ] D6.2 [device] 640×480 transparent OVR sticker PNG (view-shot) + Instagram Stories/Reels pasteboard + TikTok Share Kit v2 handoff
+- [ ] D6.1 [human:A] [device] after D6.1a: 15 s peak-streak clip on a phone (`-movflags +faststart` or the D-7 native equivalent); verify output with `ffprobe` (h264/aac/yuv420p/progressive/faststart)
+- [ ] D6.2 [human:A] [device] after D6.2a: sticker PNG + Instagram Stories/Reels pasteboard + TikTok Share Kit v2 handoff on a phone
 
 ### Day 7 — Sat–Sun Nov 28–29 (field test & release)
-- [ ] D7.1 [device] Outdoor grass/turf video: calibrate Butterworth cutoff + drill thresholds in `soccer-cv-math` and tests
-- [ ] D7.2 `code-scout` bug triage; `security-privacy-auditor` read-only audit (RLS, COPPA, BIPA, Strava, secrets) — fix all Critical/High
+- [ ] D7.1 [human:A] [device] Outdoor grass/turf video: calibrate Butterworth cutoff + drill thresholds in `soccer-cv-math` and tests
+- [ ] D7.2 after D2.2b, D4.1a, D6.1a, D6.2a, D5.1a: `code-scout` bug triage; `security-privacy-auditor` read-only audit (RLS, COPPA, BIPA, Strava, secrets) + `/agenticverse audit-security` and `slim` — fix all Critical/High
 - [ ] D7.3 [device] Full Maestro smoke suite green
-- [ ] D7.4 [secret:EXPO_TOKEN] EAS build → TestFlight internal + Play Internal App Sharing
+- [ ] D7.4 [secret:EXPO_TOKEN] after D7.4a: EAS build → TestFlight internal + Play Internal App Sharing
 - [ ] [HUMAN GATE 3] Owner: field-test sign-off on the pitch; MVP release go/no-go
 
 ## Track: hardware (local only)
 ### Day 1B / Day 2 AM — Sun night – Mon Nov 23 before 9:00 AM
+- [ ] [HUMAN GATE 4] Owner (hardware only, moved out of GATE 1 Nov 24 so it no longer blocks software): install `uv`, confirm `uv tool run --python 3.12 build123d-mcp@latest --version`, register the server per `docs/MCP_SETUP.md`; decide shield base curve (Decisions D-3)
 - [ ] H1 [local-only] Rev-0.1: `cad-engineer` + `eyewear-cad-rulebook` builds the 4-part shield (frame, temple L/R, TPU bumper) from `hardware/glasses/params.py`; iso/front/side/top PNGs inspected; `validate()` on every part
 - [ ] H2 [local-only] Rev-0.2: fix Rev-0.1 findings; export `assembly.step`, 4 STLs, `lens_flat_pc2mm.dxf`, `PRINT_ORDER.md` to `hardware/glasses/exports/rev-0.2/`
 - [ ] [HUMAN GATE 2] Owner: submit SLS Nylon 11 (frame, temples) + TPU 90A (bumper) job to Penn State OriginLabs, 123 S. Burrowes St., Mon Nov 23 9:00 AM (separate powders ⇒ separate builds); buy 2.0 mm clear PC sheet + coupon for 24 h bend test
@@ -66,12 +78,13 @@
 - D-2 (Nov 22) Voice debrief keys live only in Supabase edge-function secrets; client sends metrics-only prompts; server enforces 6 000-char prompt and 16 000 TTS-char/month caps.
 - D-3 (Nov 22) **OPEN — owner decides before H1:** a 6-base (R 88.3 mm) cylinder gives 20.9° wrap at a 63 mm PD (target 15–18°) and 1.13 % lens strain (cold-curve guideline R ≥ 200 mm for 2 mm PC). 5-base gives 17.3° / 0.94 %. Default stays 6-base as specified. Run `python hardware/glasses/params.py` for live numbers.
 - D-4 (Nov 22) Upstream `ffmpeg-kit` was retired in 2025 (binaries pulled). D6.1 must pick a maintained fork or a native AVFoundation/MediaCodec path; command builders are library-agnostic.
-- D-5 (Nov 24) **PROPOSED — Person A decides before D2.0:** Day 2–3 live pose uses `expo-mediapipe-pose@0.5.2` (Expo Module wrapping native MediaPipe Pose Landmarker; own camera session; peer `react-native-svg ^15.15.4`) instead of a `react-native-vision-camera` frame processor → MediaPipe, because the v3/v4 MediaPipe frame-processor plugins do not build against vision-camera v5. vision-camera 5.2.4 (+ -worklets, -resizer, nitro-modules 0.37.2, nitro-image 0.15.2) is deferred to D6.1 recording, which must solve the single-camera-session constraint (never mount two camera sessions). Skia stays `@shopify/react-native-skia` 2.14.0.
-- D-6 (Nov 24) **PROPOSED — Person B decides before D2.0:** contract v1.1.0. The debrief prompt is built server-side (`voice-debrief` accepts only `DebriefRequest` v2 and rejects `{system,user}`), `DebriefTransport.requestDebrief(request)` replaces `(prompt, persona)`, `buildDebriefPrompt` is removed from the client barrel, and migration `003_voice_usage_rpc.sql` adds service-role-only RPCs `reserve_debrief_chars`, `refund_debrief_chars`, `consume_qa_seconds` (atomic 16 000-char and 300–600 s monthly caps).
+- D-5 (Nov 24) **ACCEPTED by owner Nov 24:** Day 2–3 live pose uses `expo-mediapipe-pose@0.5.2` (Expo Module wrapping native MediaPipe Pose Landmarker; own camera session; peer `react-native-svg ^15.15.4`) instead of a `react-native-vision-camera` frame processor → MediaPipe, because the v3/v4 MediaPipe frame-processor plugins do not build against vision-camera v5. vision-camera 5.2.4 (+ -worklets, -resizer, nitro-modules 0.37.2, nitro-image 0.15.2) is deferred to D6.1 recording, which must solve the single-camera-session constraint (never mount two camera sessions). Skia stays `@shopify/react-native-skia` 2.14.0.
+- D-6 (Nov 24) **ACCEPTED by owner Nov 24:** contract v1.1.0 (lands in D2.0). The debrief prompt is built server-side (`voice-debrief` accepts only `DebriefRequest` v2 and rejects `{system,user}`), `DebriefTransport.requestDebrief(request)` replaces `(prompt, persona)`, `buildDebriefPrompt` is removed from the client barrel, and migration `003_voice_usage_rpc.sql` adds service-role-only RPCs `reserve_debrief_chars`, `refund_debrief_chars`, `consume_qa_seconds` (atomic 16 000-char and 300–600 s monthly caps).
+- D-8 (Nov 24) **ACCEPTED by owner Nov 24:** local sprint work runs as Agenticverse waves (`docs/AGENTICVERSE_SPRINT.md`): Day 4–7 agent halves (`…a` lines) are pulled forward; builders share one working tree with disjoint write paths and the orchestrator commits each slice; each wave gets one cross-family audit; D2.0 ships as its own PR so the Dev Client build starts early. Routine 1 is a paused backstop during wave runs.
 
 ## Blockers
 - ~~B-1~~ Resolved Nov 22: owner created private repo `OAKinti/pitch-iq-mvp`; `main` is the default branch.
-- B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2).
+- B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2; now HUMAN GATE 4, hardware only).
 
 ## Contract changes
 - v1.0.0 frozen Nov 22.
@@ -84,6 +97,10 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-24 — local (Opus 5.5, Agenticverse) — claude/agenticverse-sprint
+- Did: merged Agenticverse harness v2; owner accepted D-5/D-6 (D2.0 is now an agent task); Day 4–7 agent halves pulled forward (D-8); hardware items moved from GATE 1 to GATE 4; build123d MCP moved out of project scope; builders share one tree; verify runs once per task; `docs/AGENTICVERSE_SPRINT.md` holds the wave-run prompt.
+- Verified: `npm run verify` → see commit; `npm run test:hooks` → see commit. No product code changed.
+- Next: HUMAN GATE 1, then `docs/AGENTICVERSE_SPRINT.md` wave 0.
 ### 2026-11-22 — local (Opus 5.5) — claude/day-1-mvp
 - Did: created remote `main` at empty root commit `fd96ec6` (via GitHub API, no code on main), set `main` as default branch, opened Day 1 PR. No Day 2 work started.
 - Next: owner reviews + merges the PR (HUMAN GATE 1).

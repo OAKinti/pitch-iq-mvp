@@ -1,0 +1,304 @@
+{
+  "sprint": "PitchIQ Day 2-7 agent work (D2.0-D2.5 clauses here; D4.1a/D4.2a/D5.1a/D6.0/D6.1a/D6.2a/D7.4a clauses are added by the wave-0 spec step) - target CONTRACT_VERSION 1.1.0 - written 2026-11-24, D-5/D-6 accepted by owner 2026-11-24",
+  "decisions_required": [
+    "D-5 ACCEPTED by owner 2026-11-24 (Person A owns): live pose via expo-mediapipe-pose 0.5.2 (own native camera session); react-native-vision-camera 5.2.4 deferred to D6.1. Every CV interface below assumes D-5 = accepted.",
+    "D-6 ACCEPTED by owner 2026-11-24 (Person B owns): frozen-area contract change v1.1.0 = DebriefRequest/DebriefResponse wire types in src/types/contracts.ts, DebriefTransport v2, migration 003 quota RPCs. Lands in D2.0 with docs/INTERFACE_CONTRACTS.md + CONTRACT_VERSION + Decisions entry in the same commit."
+  ],
+  "interfaces": [
+    {
+      "name": "PoseSourceProvider",
+      "signature": "// src/services/cv/poseSource.ts  (PoseSource = 'mock' | 'mediapipe' from contracts.ts)\nexport type PoseSourceError = 'permission_denied' | 'camera_error' | 'stalled';\nexport interface PoseSourceStats { readonly delivered: number; readonly dropped: number }\nexport interface PoseSourceProvider {\n  readonly kind: PoseSource;\n  start(onFrame: (frame: PoseFrame) => void, onError: (error: PoseSourceError) => void): void;\n  stop(): void;\n  ingest(raw: RawPoseResult): void;            // mediapipe: map + forward; mock: no-op\n  reportNativeError(error: 'permission_denied' | 'camera_error'): void;\n  stats(): PoseSourceStats;\n}\nexport const POSE_STALL_MS = 1500;",
+      "pre": "start() only after selectPoseSource returned ok. onFrame/onError are the only consumers.",
+      "post": "Every frame passed to onFrame satisfies the PoseFrame contract, is sanitized (SEC-1), has strictly increasing timestampMs and frameIndex counting from 0 per start() (REC-3). After stop() returns no callback fires. start() while running stops the previous session first (CON-1).",
+      "errors": "Never throws. permission_denied / camera_error -> onError once, provider stops (FAIL-5). No delivered frame for POSE_STALL_MS while running -> onError('stalled') once per stall (REC-1)."
+    },
+    {
+      "name": "RawPoseResult + toPoseFrame",
+      "signature": "// src/services/cv/poseFrame.ts\nexport interface RawPoseResult {\n  readonly landmarks: ReadonlyArray<{ x: number; y: number; z: number; visibility?: number }>; // normalized [0,1], MediaPipe order\n  readonly timestampMs: number;\n  readonly imageWidth: number;\n  readonly imageHeight: number;\n}\nexport function toPoseFrame(raw: RawPoseResult, frameIndex: number): PoseFrame | null; // source 'mediapipe'",
+      "pre": "raw comes only from mediapipeBinding / MediapipePoseView (the binding converts the library's native shape into RawPoseResult).",
+      "post": "Returns sanitizePoseFrame(frame): landmarks 1-10 = {x:0,y:0,z:0,visibility:0}; x,y and visibility clamped to [0,1]; missing visibility -> 0 (fail closed).",
+      "errors": "Returns null (caller increments stats.dropped) when landmarks.length !== 33, any x/y/z/timestamp is non-finite, or imageWidth/imageHeight <= 0 (FAIL-3)."
+    },
+    {
+      "name": "selectPoseSource / createMockPoseSource / createMediapipePoseSource",
+      "signature": "// src/services/cv/poseSource.ts\nexport interface PoseClock { setInterval(fn: () => void, ms: number): unknown; clearInterval(handle: unknown): void; now(): number }\nexport type PoseSourceUnavailableReason = 'consent_missing' | 'parent_locked' | 'native_unavailable';\nexport function createMockPoseSource(opts: MockPoseOptions, clock?: PoseClock): PoseSourceProvider;   // wraps createMockPoseStream, interval 1000/fps, frames passed through sanitizePoseFrame\nexport function createMediapipePoseSource(clock?: PoseClock): PoseSourceProvider;                    // pure hub fed by ingest(); stall watchdog on clock\nexport function selectPoseSource(opts: {\n  simulate: boolean; consentGranted: boolean; liveAllowed: boolean; nativeAvailable: boolean;\n  scenario: MockScenario; seed?: number; clock?: PoseClock;\n}): { ok: true; provider: PoseSourceProvider } | { ok: false; reason: PoseSourceUnavailableReason };",
+      "pre": "consentGranted = camera_skeletal_tracking consent exists. liveAllowed = !requiresParent || parental_verified. nativeAvailable = isMediapipeAvailable().",
+      "post": "Order: !consentGranted -> consent_missing; simulate -> mock; !liveAllowed -> parent_locked; !nativeAvailable -> native_unavailable; else mediapipe. Default clock = global setInterval/clearInterval/Date.now.",
+      "errors": "Never returns a mock provider when simulate === false (FAIL-2)."
+    },
+    {
+      "name": "mediapipeBinding + MediapipePoseView",
+      "signature": "// src/services/cv/mediapipeBinding.ts  - the ONLY .ts file that references expo-mediapipe-pose (lazy require in try/catch)\nexport function isMediapipeAvailable(): boolean;\n// src/services/cv/MediapipePoseView.tsx - the ONLY component that mounts the library camera\nexport interface MediapipePoseViewProps { provider: PoseSourceProvider; active: boolean; facing: 'front' | 'back'; style?: StyleProp<ViewStyle> }\nexport function MediapipePoseView(props: MediapipePoseViewProps): React.ReactElement | null;",
+      "pre": "Rendered only when provider.kind === 'mediapipe'. Library API is read from node_modules/expo-mediapipe-pose typings after D2.0; nothing about it is assumed here.",
+      "post": "Each library pose result -> provider.ingest(RawPoseResult); library permission/camera errors -> provider.reportNativeError(...). Pose landmarker only: no face, hand or segmentation outputs enabled; no pixels leave native (SEC-3). Renders null when !active or the module is unavailable.",
+      "errors": "isMediapipeAvailable() returns false, never throws, in Expo Go, Jest and web (FAIL-1)."
+    },
+    {
+      "name": "createFpsMeter",
+      "signature": "// src/services/cv/fpsMeter.ts\nexport interface FpsMeter { push(timestampMs: number): number; reset(): void }\nexport function createFpsMeter(windowMs?: number): FpsMeter; // default 1000; returns frames in the trailing window scaled to per-second",
+      "pre": "Fed with delivered PoseFrame.timestampMs.",
+      "post": "Exact 30 FPS synthetic timestamps -> 30 +/- 1 after the first window; 0 after reset.",
+      "errors": "Non-increasing timestamps are ignored."
+    },
+    {
+      "name": "SKELETON_BONES + projectSkeleton",
+      "signature": "// src/domain/pose/skeleton.ts (exported from src/domain barrel; pure, 100 % coverage)\nexport const SKELETON_BONES: readonly (readonly [number, number])[]; // MediaPipe POSE_CONNECTIONS restricted to joints 11-32\nexport interface ProjectedJoint { readonly index: number; readonly x: number; readonly y: number }\nexport interface ProjectedBone { readonly from: number; readonly to: number; readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number }\nexport interface ProjectedSkeleton { readonly joints: readonly ProjectedJoint[]; readonly bones: readonly ProjectedBone[] }\nexport function projectSkeleton(frame: PoseFrame, view: { width: number; height: number }, opts?: { minVisibility?: number; mirrored?: boolean }): ProjectedSkeleton;",
+      "pre": "view = Canvas layout size in px; camera preview uses cover fit.",
+      "post": "Cover fit: s = max(vw/iw, vh/ih), ox = (vw - iw*s)/2, oy = (vh - ih*s)/2, px = (mirrored ? 1 - x : x)*iw*s + ox, py = y*ih*s + oy. Joints with visibility < minVisibility (default 0.5) omitted; a bone is drawn only if both ends are drawn. Indices 0-10 never appear (SEC-2).",
+      "errors": "view width/height <= 0 -> empty skeleton."
+    },
+    {
+      "name": "SkeletonOverlay",
+      "signature": "// src/components/SkeletonOverlay.tsx (Skia 2.14, native) + SkeletonOverlay.web.tsx (View-dot fallback; Skia breaks web export)\nexport interface SkeletonOverlayProps { frame: PoseFrame | null; mirrored: boolean; minVisibility?: number; testID?: string } // testID default 'skeleton-overlay'\nexport function SkeletonOverlay(props: SkeletonOverlayProps): React.ReactElement;",
+      "pre": "Mounted as a sibling over the camera/stage, StyleSheet.absoluteFill, pointerEvents='none'. No useSkiaFrameProcessor.",
+      "post": "Root View carries testID; size from onLayout; draws only projectSkeleton() output with Skia Canvas/Group/Circle/Line (the primitives the D2.0 jest mock provides). Colors colors.skeletonJoint / colors.skeletonBone, radius sizes.jointDot/2, stroke from an existing borders.* token - tokens only (lint:tokens).",
+      "errors": "frame === null -> renders the empty root (no Canvas children)."
+    },
+    {
+      "name": "CuePlayer",
+      "signature": "// src/services/audio/cuePlayer.ts\nexport type CueAudioSource = number; // Metro asset id from require('.../assets/audio/cues/<file>.mp3')\nexport type CueSourceMap = Readonly<Record<CoachPersona, Partial<Record<CueId, CueAudioSource>>>>;\nexport interface AudioPlayerLike { play(): void; pause(): void; seekTo(seconds: number): Promise<void> | void; volume: number; remove(): void }\nexport interface CuePlayerDeps { createPlayer(source: CueAudioSource): AudioPlayerLike; setAudioMode(mode: Record<string, unknown>): Promise<void> }\nexport interface CuePlayer {\n  prepare(persona: CoachPersona): Promise<void>;   // set audio mode, create + pre-warm this persona's players, dispose the previous persona's\n  play(id: CueId): boolean;                        // true = audio started; false = caption only\n  stopAll(): void;\n  reassertAudioMode(): Promise<void>;              // call on AppState 'active'\n  dispose(): void;\n}\nexport const CUE_AUDIO_MODE: { playsInSilentMode: true; shouldPlayInBackground: false; interruptionMode: 'duckOthers'; interruptionModeAndroid: 'duckOthers' };\nexport function createCuePlayer(opts: { sources: CueSourceMap; deps?: CuePlayerDeps }): CuePlayer; // default deps = expo-audio createAudioPlayer / setAudioModeAsync\n// src/services/audio/cueSources.ts\nexport const CUE_AUDIO_SOURCES: CueSourceMap; // empty maps until D2.4 regenerates this file",
+      "pre": "Field names of CUE_AUDIO_MODE verified against node_modules/expo-audio typings; rename to the real names if they differ and note it in the PR.",
+      "post": "Only bundled module sources are ever played - no URLs, no network (ECON-1). One cue at a time, latest wins (CON-4). Pre-warm: each created player plays once at volume 0, pauses, seeks to 0, restores volume 1 (FAIL-9). CachedCue / CUE_AUDIO_MANIFEST untouched (no frozen-type change).",
+      "errors": "Missing source, not prepared, or any player exception -> play() returns false, never throws (FAIL-8)."
+    },
+    {
+      "name": "planCueClips / renderCueSourcesModule / generate-cue-audio CLI",
+      "signature": "// src/services/audio/cueClips.ts\nexport interface CueClipPlan { readonly persona: CoachPersona; readonly id: CueId; readonly text: string; readonly fileName: string } // `${persona}__${id}.mp3`\nexport function planCueClips(): CueClipPlan[];                             // 39 = 3 personas x 13 cues, text from CUE_TEXT\nexport function renderCueSourcesModule(plan: readonly CueClipPlan[]): string; // full source of src/services/audio/cueSources.ts\n// scripts/generate-cue-audio.ts  (run: npx --yes tsx scripts/generate-cue-audio.ts [--dry-run])",
+      "pre": "Non-dry run needs ELEVENLABS_API_KEY, ELEVENLABS_VOICE_CAPTAIN, ELEVENLABS_VOICE_DRILL_SERGEANT, ELEVENLABS_VOICE_HYPE in the local shell (never EXPO_PUBLIC_*).",
+      "post": "--dry-run prints 39 lines, makes no network call, writes nothing. Real run writes assets/audio/cues/<fileName> (mp3_44100_128, model eleven_flash_v2_5) and regenerates cueSources.ts; existing files are skipped unless --force.",
+      "errors": "Missing env var -> exit 2 naming the variable (never its value). Any HTTP error -> exit 1 after listing failed clips; successful clips are kept."
+    },
+    {
+      "name": "DebriefRequest / DebriefResponse (wire, contracts.ts v1.1.0)",
+      "signature": "// src/types/contracts.ts - added in D2.0\nexport type DebriefDrillMetrics =\n  | { readonly drill: 'ball_mastery'; readonly touches: number; readonly touchesPerMinute: number; readonly footBalance: number; readonly rhythmCv: number; readonly hipSway: number }\n  | { readonly drill: 'agility_shuttle'; readonly totalTimeS: number; readonly legs: number; readonly peakSpeedMps: number; readonly meanTurnTimeMs: number; readonly splitCv: number; readonly fatigueIndex: number };\nexport interface DebriefWearable { readonly source: IngestionSource; readonly date: string; readonly restingHr: number | null; readonly hrv: number | null; readonly sleepMin: number | null; readonly recovery: number | null; readonly strain: number | null }\nexport interface DebriefRequest {\n  readonly v: 2; readonly persona: CoachPersona; readonly metrics: DebriefDrillMetrics;\n  readonly ovr: { readonly value: number; readonly band: RatingBand; readonly position: PlayerPosition; readonly attributes: AttributeVector };\n  readonly badges: readonly BadgeId[]; readonly archetype: { readonly name: string; readonly similarity: number } | null;\n  readonly wearables: readonly DebriefWearable[];\n}\nexport type DebriefFailureReason = 'monthly_cap' | 'refused' | 'invalid_request' | 'invalid_source' | 'legacy_prompt_rejected' | 'body_too_large' | 'unauthorized' | 'rate_limited' | 'llm_error';\nexport type DebriefResponse =\n  | { readonly ok: true; readonly text: string; readonly audioUrl: string | null; readonly usage: { readonly inputTokens: number; readonly outputTokens: number } }\n  | { readonly ok: false; readonly reason: DebriefFailureReason };",
+      "pre": "Only numbers, enums, ISO dates and a bounded archetype name cross the wire; no ids, names, free text.",
+      "post": "HTTP: 200 ok | 200 monthly_cap | 200 refused | 400 invalid_request, invalid_source, legacy_prompt_rejected | 401 unauthorized | 405 | 413 body_too_large | 429 rate_limited | 502 llm_error.",
+      "errors": "See voice-debrief HTTP."
+    },
+    {
+      "name": "buildDebriefRequest + DebriefTransport v2",
+      "signature": "// src/services/voice/debriefPrompt.ts (buildDebriefPrompt is REMOVED from file and barrel; templateDebrief, truncateAtWord stay)\nexport function buildDebriefRequest(input: DebriefInput): DebriefRequest; // calls assertAiSafeSources first; rounding = Day-1 compactMetrics\n// src/services/voice/transport.ts\nexport const DEBRIEF_TIMEOUT_MS = 12_000;\nexport interface DebriefTransport { requestDebrief(request: DebriefRequest): Promise<{ text: string; audioUri: string | null; inputTokens: number; outputTokens: number }> }\nexport function createEdgeFunctionTransport(client: SupabaseClient): DebriefTransport; // unchanged factory signature",
+      "pre": "createVoiceCoach / VoiceCoach signatures unchanged; AppStateContext needs no edit.",
+      "post": "One functions.invoke('voice-debrief', { body: request }) per debrief() - no retries (ECON-6). Maps ok:true -> result.",
+      "errors": "invoke error, ok:false, empty text, or no response within DEBRIEF_TIMEOUT_MS -> rejects; voiceCoach turns every rejection into the template debrief (FAIL-6)."
+    },
+    {
+      "name": "voiceCore (server logic, Deno-free and import-free)",
+      "signature": "// supabase/functions/_shared/voiceCore.ts - zero imports, no Deno globals; jest-tested from src/__tests__/services/voice/voiceCore.test.ts\nexport const MAX_BODY_BYTES = 8192, MAX_PROMPT_CHARS = 6000, DEBRIEF_MAX_CHARS = 400, DEBRIEF_RESERVE_CHARS = 400, QA_MAX_SECONDS_PER_CALL = 120;\nexport function parseDebriefRequest(rawBody: string): { ok: true; value: DebriefRequestShape } | { ok: false; status: 400 | 413; reason: 'invalid_request' | 'invalid_source' | 'legacy_prompt_rejected' | 'body_too_large' };\nexport function buildServerPrompt(req: DebriefRequestShape): { system: string; user: string }; // persona text + rules moved here from the client\nexport type CompletionResult = { kind: 'ok'; text: string; inputTokens: number; outputTokens: number } | { kind: 'refused' } | { kind: 'rate_limited' } | { kind: 'llm_error' };\nexport interface DebriefDeps {\n  reserveChars(userId: string, chars: number): Promise<string | null>; // month (YYYY-MM-01) or null = cap reached\n  refundChars(userId: string, month: string, chars: number): Promise<void>;\n  complete(prompt: { system: string; user: string }): Promise<CompletionResult>;\n  tts(text: string, persona: string): Promise<string | null>; // signed URL or null\n}\nexport function handleDebrief(rawBody: string, userId: string, deps: DebriefDeps): Promise<{ status: number; body: DebriefResponseShape }>;\nexport interface QaDeps { consumeQa(userId: string, seconds: number): Promise<{ granted: number; remaining: number }> }\nexport function handleQa(rawBody: string, userId: string, deps: QaDeps): Promise<{ status: 200 | 400 | 413; body: { ok: true; grantedSeconds: number; remainingSeconds: number } | { ok: false; reason: 'invalid_request' | 'body_too_large' } }>;",
+      "pre": "index.ts files only: CORS/method check, JWT -> userId (401 before core), wire Anthropic (claude-haiku-5-5, no temperature/top_p/top_k), ElevenLabs Flash, Storage signed URL, supabase.rpc into deps. DebriefRequestShape/DebriefResponseShape are structural copies of the contracts.ts types (no cross-tree import; parity proven by the round-trip test).",
+      "post": "handleDebrief order: size -> parse -> validate -> reserveChars(400) -> buildServerPrompt -> complete -> truncate(400) -> refund(400 - text.length) -> tts -> 200. Prompt length <= MAX_PROMPT_CHARS by construction.",
+      "errors": "Unknown keys dropped; badges must be unique catalog ids (<= 7); wearables <= 7; archetype.name must match ^[A-Za-z][A-Za-z .'-]{0,39}$; numbers finite and in plausible ranges; complete() kinds refused/rate_limited/llm_error and empty text -> full refund before responding."
+    },
+    {
+      "name": "HTTP voice-debrief (v2) and voice-qa",
+      "signature": "POST /functions/v1/voice-debrief  body: DebriefRequest  -> DebriefResponse (statuses above)\nPOST /functions/v1/voice-qa       body: { seconds: integer 0..120 } (0 = read remaining) -> 200 { ok: true, grantedSeconds, remainingSeconds } | 400 | 401 | 413",
+      "pre": "Authorization: Bearer <user JWT>. Secrets only from Deno.env: ANTHROPIC_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_*, ELEVENLABS_MODEL_ID?, SUPABASE_SERVICE_ROLE_KEY, QA_CAP_SECONDS? (default 300).",
+      "post": "Deployed by Person B in D2.3. Tier 3 conversation itself is out of scope; voice-qa is the single enforcement point it must call.",
+      "errors": "Any body containing a 'system' or 'user' key -> 400 legacy_prompt_rejected (SEC-5)."
+    },
+    {
+      "name": "Quota RPCs (supabase/migrations/003_voice_usage_rpc.sql - FROZEN AREA, D2.0 only)",
+      "signature": "create function public.reserve_debrief_chars(p_user_id uuid, p_chars integer, p_cap integer default 16000) returns date   -- reserved month, or null when the cap would be exceeded\ncreate function public.refund_debrief_chars(p_user_id uuid, p_month date, p_chars integer) returns void\ncreate function public.consume_qa_seconds(p_user_id uuid, p_seconds integer, p_cap_seconds integer default 300) returns table (granted integer, remaining integer)\n-- all: language plpgsql security definer set search_path = ''\n-- revoke execute on function ... from public, anon, authenticated; grant execute ... to service_role;",
+      "pre": "Month = date_trunc('month', timezone('utc', now()))::date computed in SQL. p_chars must be 1..400, p_seconds clamped to 0..120, p_cap clamped to <= 16000, p_cap_seconds clamped to [300, 600] (matches the 001 CHECK).",
+      "post": "reserve: insert (user, month) on conflict do nothing; single UPDATE ... set debrief_chars_used = debrief_chars_used + p_chars WHERE debrief_chars_used + p_chars <= cap RETURNING month. refund: debrief_chars_used = greatest(0, used - p_chars) on the reserved month. consume: insert on conflict do nothing; select qa_seconds_used for update; granted = least(p_seconds, greatest(0, cap - used)); update; remaining = cap - used - granted. No new table, so the RLS compliance check is unchanged.",
+      "errors": "p_chars outside 1..400 -> raise exception; the edge function never sends such values."
+    },
+    {
+      "name": "PitchIqRepository.subscribeToGroup (behaviour only, signature unchanged)",
+      "signature": "subscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void;",
+      "pre": "SupabaseRepository only; DemoRepository unchanged.",
+      "post": "Uses .subscribe((status) => ...): on every 'SUBSCRIBED' (first join and each rejoin after CHANNEL_ERROR / TIMED_OUT) re-fetches listGroupMembers and calls onChange (REC-4).",
+      "errors": "Fetch failure after a rejoin is swallowed (next change retries); after unsubscribe no onChange fires and removeChannel is called once."
+    },
+    {
+      "name": "useDrillRunner v2 + CombineDrillScreen wiring (wave 2)",
+      "signature": "// src/state/useDrillRunner.ts\nexport interface DrillRunnerOptions { simulate: boolean; consentGranted: boolean; liveAllowed: boolean; seed?: number; nativeAvailable?: boolean } // default isMediapipeAvailable()\nexport interface DrillRunner { snapshot; latestFrame; latestCue; running; result; reset; stop;\n  start(): boolean;                                  // false -> not started, sourceError set\n  readonly sourceKind: PoseSource | null; readonly provider: PoseSourceProvider | null;\n  readonly fps: number; readonly sourceError: PoseSourceError | PoseSourceUnavailableReason | null }\nexport function useDrillRunner(drillType: DrillType, opts: DrillRunnerOptions): DrillRunner;\n// New Combine testIDs (pre-registered in docs/INTERFACE_CONTRACTS.md by D2.0): skeleton-overlay, telemetry-fps, pose-source",
+      "pre": "Existing testIDs and notices keep their text: 'Dev Client build' (native_unavailable) and 'parent verifies' (parent_locked).",
+      "post": "Screen mounts MediapipePoseView only when sourceKind === 'mediapipe'; SkeletonOverlay replaces the View dots; telemetry-fps shows FpsMeter output; pose-source shows MOCK or LIVE; every new snapshot.cue -> cuePlayer.play(cue). AppStateContext owns one CuePlayer (prepare on persona change, AppState listener for REC-2).",
+      "errors": "sourceError -> drill-notice text; never silently swaps sources mid-drill (CON-2)."
+    }
+  ],
+  "invariants": {
+    "security": [
+      "SEC-1 Every PoseFrame that leaves src/services/cv has landmarks 1-10 equal to {x:0,y:0,z:0,visibility:0}; mock frames pass through sanitizePoseFrame too.",
+      "SEC-2 projectSkeleton and SkeletonOverlay never output joint indices 0-10 or bones touching them, even for an unsanitized input frame.",
+      "SEC-3 expo-mediapipe-pose is referenced only by src/services/cv/mediapipeBinding.ts and src/services/cv/MediapipePoseView.tsx; pose landmarker only (no face/hand/segmentation); no camera pixels or PoseFrames are persisted or sent over the network in Day 2-3; check:compliance stays fully green.",
+      "SEC-4 The live (mediapipe) source starts only with camera_skeletal_tracking consent and, for minors needing it, parental_verified; simulate still requires camera consent (Day-1 behaviour).",
+      "SEC-5 voice-debrief accepts only DebriefRequest v2; a body with a 'system' or 'user' key gets 400 legacy_prompt_rejected; unknown keys are dropped; the prompt is built only server-side from whitelisted numeric/enum fields plus an archetype name matching ^[A-Za-z][A-Za-z .'-]{0,39}$.",
+      "SEC-6 Strava never reaches a prompt: buildDebriefRequest throws via assertAiSafeSources, and the server rejects any wearables[].source outside {healthkit, health_connect, whoop} with 400 invalid_source before any reserve or LLM call.",
+      "SEC-7 RPC user ids come only from the verified JWT, never the body; RPCs are SECURITY DEFINER with search_path '' and EXECUTE granted to service_role only; voice_usage stays client read-only.",
+      "SEC-8 No new EXPO_PUBLIC_* variables; ElevenLabs keys are read only by scripts/generate-cue-audio.ts (local shell) and edge functions; the script never prints a key value.",
+      "ECON-1 During a drill only bundled Tier 1 cue clips play: CuePlayer accepts module ids only, and nothing in the drill path calls TTS, an LLM, or a streaming voice endpoint.",
+      "ECON-2 Debrief text is at most 400 chars (server truncates, client truncates again).",
+      "ECON-3 Monthly debrief TTS budget 16 000 chars per user: 400 chars are reserved atomically BEFORE any LLM/TTS call; a refused reservation returns 200 {ok:false, reason:'monthly_cap'} with zero spend; afterwards 400 - text.length is refunded; LLM refusal/error/empty refunds all 400.",
+      "ECON-4 Request body <= 8192 bytes (413), server prompt <= 6000 chars, badges <= 7 unique ids, wearables <= 7 records.",
+      "ECON-5 Tier 3 Q&A: consume_qa_seconds grants min(requested, cap - used) with cap clamped to [300, 600] s/month (default 300); voice-qa accepts 0..120 s per call; client QaBudget stays clamped to [5, 10] min.",
+      "ECON-6 No automatic retries of paid calls: one invoke per debrief(); any failure falls back to the template."
+    ],
+    "failure": [
+      "FAIL-1 isMediapipeAvailable() returns false and never throws in Expo Go, Jest and web; the library is required lazily inside try/catch.",
+      "FAIL-2 selectPoseSource never substitutes mock frames for a live drill: simulate=false with no native module -> {ok:false, reason:'native_unavailable'} and the existing Dev Client notice.",
+      "FAIL-3 toPoseFrame drops (null, stats.dropped++) results with != 33 landmarks, non-finite values or non-positive image size; clamps x, y, visibility to [0,1]; missing visibility -> 0.",
+      "FAIL-4 The mediapipe provider drops any result whose timestampMs <= the last delivered timestamp.",
+      "FAIL-5 A native permission or camera error calls onError once with permission_denied/camera_error and stops the provider; the runner shows drill-notice; no mock substitution.",
+      "FAIL-6 Debrief transport error, timeout (12 s), ok:false or empty text -> template debrief (source 'template', cost 0); zero-key Demo Mode is unchanged.",
+      "FAIL-7 voice-debrief TTS failure still returns 200 ok with audioUrl null; the chars stay charged (text.length).",
+      "FAIL-8 CuePlayer.play returns false and never throws on a missing source, before prepare(), or on any player exception; the caption still renders.",
+      "FAIL-9 prepare() pre-warms each created player once at volume 0 (expo-audio Android first-play silence, #52722)."
+    ],
+    "reconnection": [
+      "REC-1 Stall: a running provider with no delivered frame for 1500 ms calls onError('stalled') once per stall; the next valid frame clears it; the engine is not reset.",
+      "REC-2 AppState background: the runner stops the provider and calls cuePlayer.stopAll(); an active drill is reset (never resumed) with a drill-notice; on 'active' cuePlayer.reassertAudioMode() runs.",
+      "REC-3 start() after stop() begins a new stream: frameIndex restarts at 0 and the previous session's callbacks never fire again.",
+      "REC-4 Realtime: subscribeToGroup re-fetches members and calls onChange on every SUBSCRIBED status, including rejoins after CHANNEL_ERROR/TIMED_OUT; unsubscribe removes the channel and silences onChange."
+    ],
+    "concurrency": [
+      "CON-1 At most one PoseSourceProvider runs and at most one native camera view is mounted; start() while running stops the previous session first. vision-camera is not installed in Day 2-3 (D-5).",
+      "CON-2 One drill consumes frames from exactly one provider kind; changing simulate or drill resets the runner first.",
+      "CON-3 reserve/refund/consume RPCs are single transactions under the row lock, so concurrent calls never push debrief_chars_used or qa_seconds_used past the cap.",
+      "CON-4 CuePlayer plays one cue at a time; play(id) stops the cue that is playing (latest wins)."
+    ]
+  },
+  "out_of_scope": [
+    "react-native-vision-camera install, recording and highlight capture (D6.1; must solve single camera session with expo-mediapipe-pose)",
+    "Tier 3 Q&A conversation, its UI and a client-side server ledger (no caller yet; voice-qa is only the enforcement point)",
+    "Skia v3 / react-native-skia rename / Graphite, useSkiaFrameProcessor, Skia on web (web gets the View-dot fallback)",
+    "Live cost logging per debrief (D4.1), two-device Realtime test (D4.2), threshold calibration (D7.1)",
+    "Debrief idempotency table / server-side dedupe (needs another migration)",
+    "Any sport other than soccer"
+  ],
+  "acceptance": [
+    {
+      "clause_id": "SEC-1",
+      "test": "src/__tests__/services/cv/poseFrame.test.ts > 'redacts landmarks 1-10 on every emitted frame' and src/__tests__/services/cv/poseSource.test.ts > 'mock provider frames are sanitized'"
+    },
+    {
+      "clause_id": "SEC-2",
+      "test": "src/__tests__/domain/skeleton.test.ts > 'never projects indices 0-10 even from an unsanitized frame'; src/__tests__/ui/skeletonOverlay.test.tsx > 'draws at most 22 joints' (counts accessibilityLabel 'skia-Circle' from the D2.0 Skia mock)"
+    },
+    {
+      "clause_id": "SEC-3",
+      "test": "npm run check:compliance (all green) + src/__tests__/services/cv/mediapipeBinding.test.ts > 'only binding files reference expo-mediapipe-pose' (greps src/)"
+    },
+    {
+      "clause_id": "SEC-4",
+      "test": "src/__tests__/services/cv/poseSource.test.ts > 'selectPoseSource gate order' + src/__tests__/ui/combine.test.tsx existing 'refuses to start without camera_skeletal_tracking consent' and 'keeps live camera locked for under-13'"
+    },
+    {
+      "clause_id": "SEC-5",
+      "test": "src/__tests__/services/voice/voiceCore.test.ts > 'rejects legacy {system,user} bodies with 400' and 'drops unknown keys / rejects bad archetype names'"
+    },
+    {
+      "clause_id": "SEC-6",
+      "test": "src/__tests__/services/stravaWriteOnly.test.ts > '(c) buildDebriefRequest throws when wearables include strava' + voiceCore.test.ts > 'strava source -> 400 invalid_source with no reserve/complete call'"
+    },
+    {
+      "clause_id": "SEC-7",
+      "test": "supabase/tests/voice_usage_rpc.test.sql (pgTAP: authenticated role cannot execute RPCs; service_role can) run by Person B with `supabase test db` in D2.3 + voiceCore.test.ts > 'userId comes from the handler argument, body user_id ignored'"
+    },
+    {
+      "clause_id": "SEC-8",
+      "test": "npm run check:compliance (no secret EXPO_PUBLIC_*) + src/__tests__/services/audio/cueClips.test.ts > 'plan has no env-derived content'"
+    },
+    {
+      "clause_id": "ECON-1",
+      "test": "src/__tests__/services/audio/cuePlayer.test.ts > 'never creates a player for non-numeric sources' + check:compliance 'no continuous live-voice agent wiring'"
+    },
+    {
+      "clause_id": "ECON-2",
+      "test": "voiceCore.test.ts > 'truncates completion to 400 chars' + src/__tests__/services/voice.test.ts existing truncation test"
+    },
+    {
+      "clause_id": "ECON-3",
+      "test": "voiceCore.test.ts > 'reserve happens before complete', 'cap refusal spends nothing', 'refunds 400 - len', 'refunds all on refused/llm_error/empty' + pgTAP 'reserve at 15 800 refused, at 15 600 granted'"
+    },
+    {
+      "clause_id": "ECON-4",
+      "test": "voiceCore.test.ts > '8193-byte body -> 413', 'prompt <= 6000 chars for max-size valid request', 'more than 7 badges/wearables -> 400'"
+    },
+    {
+      "clause_id": "ECON-5",
+      "test": "voiceCore.test.ts > 'handleQa validates 0..120 and passes through grants' + pgTAP 'consume grants partial to cap and clamps cap to [300,600]'"
+    },
+    {
+      "clause_id": "ECON-6",
+      "test": "src/__tests__/services/voice.test.ts > 'transport invokes exactly once on failure'"
+    },
+    {
+      "clause_id": "FAIL-1",
+      "test": "src/__tests__/services/cv/mediapipeBinding.test.ts > 'returns false when the module throws or is empty'"
+    },
+    {
+      "clause_id": "FAIL-2",
+      "test": "poseSource.test.ts > 'never returns mock when simulate is false' + combine.test.tsx existing 'simulate OFF shows the Dev Client notice'"
+    },
+    {
+      "clause_id": "FAIL-3",
+      "test": "poseFrame.test.ts > 'drops malformed results' and 'clamps coordinates and visibility'"
+    },
+    {
+      "clause_id": "FAIL-4",
+      "test": "poseSource.test.ts > 'drops non-monotonic timestamps'"
+    },
+    {
+      "clause_id": "FAIL-5",
+      "test": "poseSource.test.ts > 'native error reported once then stopped' + combine.test.tsx > 'shows notice on permission_denied'"
+    },
+    {
+      "clause_id": "FAIL-6",
+      "test": "voice.test.ts > 'template on timeout / ok:false / invoke error' (fake timers, 12 s)"
+    },
+    {
+      "clause_id": "FAIL-7",
+      "test": "voiceCore.test.ts > 'tts null still returns ok with audioUrl null and charges text length'"
+    },
+    {
+      "clause_id": "FAIL-8",
+      "test": "cuePlayer.test.ts > 'play returns false before prepare, for missing cue, and when the player throws'"
+    },
+    {
+      "clause_id": "FAIL-9",
+      "test": "cuePlayer.test.ts > 'prepare pre-warms each player at volume 0 then restores 1'"
+    },
+    {
+      "clause_id": "REC-1",
+      "test": "poseSource.test.ts > 'stalled fires once after 1500 ms and clears on next frame' (injected clock)"
+    },
+    {
+      "clause_id": "REC-2",
+      "test": "combine.test.tsx > 'background resets an active drill and stops cues' (mock AppState change)"
+    },
+    {
+      "clause_id": "REC-3",
+      "test": "poseSource.test.ts > 'restart resets frameIndex and detaches old callbacks'"
+    },
+    {
+      "clause_id": "REC-4",
+      "test": "src/__tests__/services/repository.test.ts > 'refetches on every SUBSCRIBED and stops after unsubscribe' (fake channel)"
+    },
+    {
+      "clause_id": "CON-1",
+      "test": "poseSource.test.ts > 'start while running stops previous session' + combine.test.tsx > 'mounts no MediapipePoseView for mock source'"
+    },
+    {
+      "clause_id": "CON-2",
+      "test": "combine.test.tsx > 'toggling simulate resets the runner'"
+    },
+    {
+      "clause_id": "CON-3",
+      "test": "supabase/tests/voice_usage_rpc.test.sql (pgTAP cap edge cases; atomicity follows from single-statement UPDATE / FOR UPDATE) - Person B, D2.3"
+    },
+    {
+      "clause_id": "CON-4",
+      "test": "cuePlayer.test.ts > 'second play stops the first'"
+    },
+    {
+      "clause_id": "DEV-1",
+      "test": "MANUAL (does not flip passes): Person A, physical phone, Dev Client: telemetry-fps >= 24 over a 30 s Ball Mastery drill, overlay aligned in front + back camera, landmarks 1-10 zero in a debug dump; numbers pasted in the SPRINT_STATE session log"
+    },
+    {
+      "clause_id": "DEV-2",
+      "test": "MANUAL: Person B live curl against deployed voice-debrief: legacy body 400, strava 400, cap refusal after forcing used=15 800, voice-qa grant 0 at cap"
+    }
+  ]
+}

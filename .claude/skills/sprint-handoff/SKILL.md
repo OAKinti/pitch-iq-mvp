@@ -6,8 +6,7 @@ description: How to update SPRINT_STATE.md at the end of any work session — ch
 Use this skill whenever you finish, pause or hand off sprint work; the next session must be able to resume from `SPRINT_STATE.md` alone.
 
 ## Steps
-1. **Re-run the gates** you are about to report, and record what you actually ran. Never copy results forward from an earlier session.
-   `npm run typecheck` · `npm test` · `npm run lint:tokens` · `npm run check:compliance` (plus `npm run test:hooks` if you touched `.claude/hooks`).
+1. **Record the gates you actually ran.** If this session already ran `npm run verify` after its last code change, reuse that output (it covers typecheck, test, lint:tokens and check:compliance). Otherwise run it now. Add `npm run test:hooks` if you touched `.claude/hooks`. Never copy results forward from an earlier session.
 2. **Update the checkboxes** in `SPRINT_STATE.md`:
    - Tick `- [x]` only for tasks whose gates passed in step 1.
    - Leave partial work unchecked, and append ` — PARTIAL: <what remains>`.
