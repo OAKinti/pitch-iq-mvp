@@ -1,3 +1,4 @@
+import { AppState as RNAppState } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CONSENT_POLICY_VERSION,
@@ -24,11 +25,14 @@ import {
 import {
   DEMO_USER_ID,
   createEdgeFunctionTransport,
+  createCuePlayer,
   createRepository,
+  CUE_AUDIO_SOURCES,
   createVoiceCoach,
   getAppConfig,
   getSupabaseClient,
   type AppConfig,
+  type CuePlayer,
   type PitchIqRepository,
   type VoiceCoach,
 } from '../services';
@@ -48,6 +52,10 @@ export interface AppState {
   config: AppConfig;
   repository: PitchIqRepository;
   voiceCoach: VoiceCoach;
+  /** The single Tier 1 cue player (ECON-1). */
+  cuePlayer: CuePlayer;
+  /** Increments each time the app leaves the foreground (REC-2). */
+  backgroundTick: number;
   now: () => Date;
   hasConsent: (type: ConsentType) => boolean;
   setAge: (bracket: AgeBracket) => void;
@@ -63,6 +71,7 @@ export interface AppStateProviderProps {
   children: React.ReactNode;
   repository?: PitchIqRepository;
   voiceCoach?: VoiceCoach;
+  cuePlayer?: CuePlayer;
   now?: () => Date;
   config?: AppConfig;
   /** Test seeding only. */
@@ -78,6 +87,7 @@ export function AppStateProvider({
   children,
   repository: repositoryOverride,
   voiceCoach: voiceCoachOverride,
+  cuePlayer: cuePlayerOverride,
   now: nowOverride,
   config: configOverride,
   initial,
@@ -101,6 +111,35 @@ export function AppStateProvider({
     const client = getSupabaseClient(config);
     return createVoiceCoach({ persona, transport: client ? createEdgeFunctionTransport(client) : null });
   }, [voiceCoachOverride, persona, config]);
+
+  const cuePlayer = useMemo(
+    () => cuePlayerOverride ?? createCuePlayer({ sources: CUE_AUDIO_SOURCES }),
+    [cuePlayerOverride],
+  );
+  const [backgroundTick, setBackgroundTick] = useState(0);
+
+  useEffect(() => {
+    cuePlayer.prepare(persona).catch(() => undefined);
+  }, [cuePlayer, persona]);
+
+  useEffect(
+    () => () => {
+      if (!cuePlayerOverride) cuePlayer.dispose();
+    },
+    [cuePlayer, cuePlayerOverride],
+  );
+
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (status) => {
+      if (status === 'active') {
+        cuePlayer.reassertAudioMode().catch(() => undefined);
+      } else {
+        cuePlayer.stopAll();
+        setBackgroundTick((n) => n + 1);
+      }
+    });
+    return () => sub?.remove();
+  }, [cuePlayer]);
 
   const live = useRef({ results, position, voiceCoach, persona });
   live.current = { results, position, voiceCoach, persona };
@@ -177,6 +216,8 @@ export function AppStateProvider({
       config,
       repository,
       voiceCoach,
+      cuePlayer,
+      backgroundTick,
       now,
       hasConsent: (type) => consents.some((c) => c.type === type),
       setAge,
@@ -185,7 +226,7 @@ export function AppStateProvider({
       setPosition,
       completeDrill,
     }),
-    [ageBracket, persona, position, consents, results, ovr, badges, archetypes, debrief, config, repository, voiceCoach, now, setAge, grantConsent, setPersona, setPosition, completeDrill],
+    [ageBracket, persona, position, consents, results, ovr, badges, archetypes, debrief, config, repository, voiceCoach, cuePlayer, backgroundTick, now, setAge, grantConsent, setPersona, setPosition, completeDrill],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

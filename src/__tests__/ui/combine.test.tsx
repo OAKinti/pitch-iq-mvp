@@ -1,7 +1,38 @@
 import React from 'react';
+import { AppState } from 'react-native';
 import { act, fireEvent, screen } from '@testing-library/react-native';
+import type { PoseSourceProvider } from '../../services/cv';
+import type { CuePlayer } from '../../services/audio';
 import { CAMERA_CONSENT, renderNavigator } from './helpers';
 import { CONSENT_POLICY_VERSION } from '../../types/contracts';
+
+const mockProviders: PoseSourceProvider[] = [];
+jest.mock('../../services/cv/poseSource', () => {
+  const actual = jest.requireActual('../../services/cv/poseSource');
+  return {
+    ...actual,
+    selectPoseSource: (o: unknown) => {
+      const r = actual.selectPoseSource(o);
+      if (r.ok) mockProviders.push(r.provider);
+      return r;
+    },
+  };
+});
+jest.mock('../../services/cv/MediapipePoseView', () => {
+  const { View: MockView } = jest.requireActual('react-native');
+  const ReactLib = jest.requireActual('react');
+  return { MediapipePoseView: () => ReactLib.createElement(MockView, { testID: 'mediapipe-view-stub' }) };
+});
+
+function fakeCuePlayer(): jest.Mocked<CuePlayer> {
+  return {
+    prepare: jest.fn().mockResolvedValue(undefined),
+    play: jest.fn().mockReturnValue(false),
+    stopAll: jest.fn(),
+    reassertAudioMode: jest.fn().mockResolvedValue(undefined),
+    dispose: jest.fn(),
+  };
+}
 
 const isDisabled = (id: string): boolean => Boolean(screen.getByTestId(id).props.accessibilityState?.disabled);
 
@@ -14,7 +45,10 @@ async function advance(totalMs: number, chunkMs = 1000) {
 }
 
 describe('CombineDrillScreen', () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockProviders.length = 0;
+  });
   afterEach(() => jest.useRealTimers());
 
   it('refuses to start without camera_skeletal_tracking consent', async () => {
@@ -52,8 +86,13 @@ describe('CombineDrillScreen', () => {
     await advance(3000);
     expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
     expect(screen.getByTestId('cue-caption')).not.toHaveTextContent('Awaiting cue');
-    expect(screen.queryByTestId('joint-27')).toBeTruthy();
-    expect(screen.queryByTestId('joint-5')).toBeNull(); // redacted face landmark never drawn
+    expect(screen.getByTestId('skeleton-overlay')).toBeTruthy();
+    await fireEvent(screen.getByTestId('skeleton-overlay'), 'layout', {
+      nativeEvent: { layout: { width: 320, height: 240, x: 0, y: 0 } },
+    });
+    const circles = screen.getAllByLabelText('skia-Circle').length; // face landmarks are redacted
+    expect(circles).toBeGreaterThanOrEqual(1);
+    expect(circles).toBeLessThanOrEqual(22);
 
     await advance(12000);
     expect(screen.getByTestId('telemetry-phase')).toHaveTextContent('ACTIVE');
@@ -92,6 +131,74 @@ describe('CombineDrillScreen', () => {
     await view.unmount();
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
+  });
+
+  it('shows telemetry-fps and pose-source MOCK, mounting no MediapipePoseView for mock source', async () => {
+    const player = fakeCuePlayer();
+    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] }, cuePlayer: player });
+    expect(screen.getByTestId('pose-source')).not.toHaveTextContent('MOCK');
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    await fireEvent.press(screen.getByTestId('drill-start'));
+    await advance(3000);
+    expect(screen.getByTestId('pose-source')).toHaveTextContent('MOCK');
+    expect(Number(screen.getByTestId('telemetry-fps').props.children)).toBeGreaterThan(0);
+    expect(screen.queryByTestId('mediapipe-view-stub')).toBeNull();
+    expect(player.play).toHaveBeenCalled();
+    expect(screen.getByTestId('cue-caption')).not.toHaveTextContent('Awaiting cue');
+  });
+
+  it('shows notice on permission_denied', async () => {
+    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] } });
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    await fireEvent.press(screen.getByTestId('drill-start'));
+    await advance(1000);
+    await act(async () => {
+      mockProviders[mockProviders.length - 1]!.reportNativeError('permission_denied');
+    });
+    expect(screen.getByTestId('drill-notice')).toHaveTextContent(/permission/i);
+    expect(isDisabled('drill-start')).toBe(false); // stopped, no mock substitution
+    const phase = screen.getByTestId('telemetry-phase').props.children;
+    await advance(2000);
+    expect(screen.getByTestId('telemetry-phase').props.children).toBe(phase);
+  });
+
+  it('background resets an active drill and stops cues', async () => {
+    let handler: ((s: string) => void) | undefined;
+    const remove = jest.fn();
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+      handler = h;
+      return { remove };
+    }) as never);
+    const player = fakeCuePlayer();
+    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] }, cuePlayer: player });
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    await fireEvent.press(screen.getByTestId('drill-start'));
+    await advance(3000);
+    expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
+
+    await act(async () => handler?.('background'));
+    expect(player.stopAll).toHaveBeenCalled();
+    expect(screen.getByTestId('telemetry-phase')).toHaveTextContent('IDLE');
+    expect(screen.getByTestId('drill-notice')).toHaveTextContent(/cancelled/i);
+    expect(isDisabled('drill-start')).toBe(false);
+    await advance(2000);
+    expect(screen.getByTestId('telemetry-phase')).toHaveTextContent('IDLE'); // never resumed
+
+    await act(async () => handler?.('active'));
+    expect(player.reassertAudioMode).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('toggling simulate resets the runner', async () => {
+    await renderNavigator({ initialRoute: 'Combine', initial: { consents: [CAMERA_CONSENT] } });
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    await fireEvent.press(screen.getByTestId('drill-start'));
+    await advance(3000);
+    expect(screen.getByTestId('telemetry-phase')).not.toHaveTextContent('IDLE');
+    await fireEvent.press(screen.getByTestId('simulate-toggle'));
+    expect(screen.getByTestId('telemetry-phase')).toHaveTextContent('IDLE');
+    expect(screen.getByTestId('pose-source')).not.toHaveTextContent('MOCK');
+    expect(isDisabled('drill-start')).toBe(false);
   });
 
   it('exposes policy version constant used for consent records', () => {

@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { HudButton, HudPanel, HudToggle, NavBackButton, OptionChip, ScreenFrame, SectionLabel, TelemetryReadout } from '../components';
 import { useNavigation } from '../navigation/NavigationContext';
 import { useAppState } from '../state/AppStateContext';
 import { useDrillRunner } from '../state/useDrillRunner';
-import { PRIVACY_REDACTED_LANDMARKS, type DrillType } from '../types/contracts';
+import { SkeletonOverlay } from '../components/SkeletonOverlay';
+import { MediapipePoseView } from '../services/cv';
+import type { DrillType } from '../types/contracts';
 import { borders, colors, radii, sizes, spacing, typography } from '../theme/tokens';
 
 const DRILLS: readonly { id: DrillType; label: string; sub: string }[] = [
@@ -12,7 +14,17 @@ const DRILLS: readonly { id: DrillType; label: string; sub: string }[] = [
   { id: 'agility_shuttle', label: 'Agility Shuttle', sub: '6 legs, turn sharp' },
 ];
 
-const MIN_JOINT_VISIBILITY = 0.5;
+const MIN_FRAMING_QUALITY = 0.5;
+const BACKGROUND_NOTICE = 'Drill cancelled because the app left the foreground. Start again.';
+
+const SOURCE_NOTICES: Record<string, string> = {
+  consent_missing: 'Motion-tracking consent is required before any drill.',
+  native_unavailable: 'Live camera needs the Dev Client build (Day 2–3) — enable Simulate Live Drill',
+  parent_locked: 'Live camera stays locked until a parent verifies. Enable Simulate Live Drill to practice.',
+  permission_denied: 'Camera permission was denied. Allow camera access in Settings to run a live drill.',
+  camera_error: 'The camera failed. Close other camera apps and start the drill again.',
+  stalled: 'Pose tracking stalled. Check the framing and start the drill again.',
+};
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const TIMER_WIDTH = 4;
@@ -30,12 +42,32 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
   const [drill, setDrill] = useState<DrillType>('ball_mastery');
   const [simulate, setSimulate] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const runner = useDrillRunner(drill, seed);
-
   const hasConsent = app.hasConsent('camera_skeletal_tracking');
   const parentLocked = app.requiresParent && !app.hasConsent('parental_verified');
-  const { snapshot, latestFrame, latestCue, running, result } = runner;
+  const { cuePlayer } = app;
+  const runner = useDrillRunner(drill, {
+    onCue: (id) => {
+      cuePlayer.play(id); // false (no clip) is fine: the caption still shows
+    },
+    simulate,
+    consentGranted: hasConsent,
+    liveAllowed: !parentLocked,
+    ...(seed === undefined ? {} : { seed }),
+  });
+  const { snapshot, latestFrame, latestCue, running, result, sourceKind, provider } = runner;
   const metricsDone = result !== null;
+
+  const runnerRef = useRef(runner);
+  runnerRef.current = runner;
+  const seenBackground = useRef(app.backgroundTick);
+  useEffect(() => {
+    if (seenBackground.current === app.backgroundTick) return;
+    seenBackground.current = app.backgroundTick;
+    if (runnerRef.current.running) {
+      runnerRef.current.reset();
+      setNotice(BACKGROUND_NOTICE);
+    }
+  }, [app.backgroundTick]);
 
   const selectDrill = (next: DrillType) => {
     if (running) return;
@@ -44,16 +76,14 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
     setDrill(next);
   };
 
+  const changeSimulate = (next: boolean) => {
+    runner.reset(); // CON-2: one drill, one provider kind
+    setNotice(null);
+    setSimulate(next);
+  };
+
   const start = () => {
     if (!hasConsent) return;
-    if (!simulate) {
-      setNotice(
-        parentLocked
-          ? 'Live camera stays locked until a parent verifies. Enable Simulate Live Drill to practice.'
-          : 'Live camera needs the Dev Client build (Day 2â€“3) â€” enable Simulate Live Drill',
-      );
-      return;
-    }
     setNotice(null);
     runner.start();
   };
@@ -69,6 +99,7 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
   const rate = snapshot?.liveRate ?? 0;
   const quality = snapshot?.framingQuality ?? 0;
   const phase = snapshot ? snapshot.phase : 'idle';
+  const shownNotice = notice ?? (runner.sourceError ? (SOURCE_NOTICES[runner.sourceError] ?? null) : null);
   const cueText = latestCue ? app.voiceCoach.cue(latestCue).text : 'Awaiting cue';
 
   return (
@@ -88,23 +119,18 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
         ))}
       </View>
 
-      <HudToggle testID="simulate-toggle" label="Simulate Live Drill" value={simulate} onChange={setSimulate} />
+      <HudToggle testID="simulate-toggle" label="Simulate Live Drill" value={simulate} onChange={changeSimulate} />
 
       <View testID="drill-stage" style={styles.stage}>
-        {latestFrame?.landmarks.map((lm, i) =>
-          PRIVACY_REDACTED_LANDMARKS.includes(i) || lm.visibility < MIN_JOINT_VISIBILITY ? null : (
-            <View
-              key={i}
-              testID={`joint-${i}`}
-              style={[styles.joint, { left: `${lm.x * 100}%`, top: `${lm.y * 100}%` }]}
-            />
-          ),
-        )}
+        {sourceKind === 'mediapipe' && provider && running ? (
+          <MediapipePoseView provider={provider} active facing="front" style={StyleSheet.absoluteFill} />
+        ) : null}
+        <SkeletonOverlay frame={latestFrame} mirrored={sourceKind === 'mediapipe'} />
         {!latestFrame ? <Text style={styles.stageHint}>Skeleton joints appear here</Text> : null}
       </View>
 
       <View style={styles.framing}>
-        <SectionLabel text={`Framing ${Math.round(quality * 100)}%`} tone={quality < MIN_JOINT_VISIBILITY && snapshot ? 'warning' : 'muted'} />
+        <SectionLabel text={`Framing ${Math.round(quality * 100)}%`} tone={quality < MIN_FRAMING_QUALITY && snapshot ? 'warning' : 'muted'} />
         <View style={styles.framingTrack}>
           <View testID="framing-bar" style={[styles.framingFill, { width: `${quality * 100}%` }]} />
         </View>
@@ -120,6 +146,12 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
             value={isBall ? String(Math.round(rate)) : rate.toFixed(1)}
             unit={isBall ? 'touch/min' : 'm/s'}
           />
+          <TelemetryReadout testID="telemetry-fps" label="FPS" value={String(Math.round(runner.fps))} />
+          <TelemetryReadout
+            testID="pose-source"
+            label="Source"
+            value={sourceKind === 'mediapipe' ? 'LIVE' : sourceKind === 'mock' ? 'MOCK' : '—'}
+          />
           <TelemetryReadout testID="telemetry-timer" label="Timer" value={formatTimer(snapshot?.elapsedMs ?? 0)} tone="accent" />
         </View>
         <Text testID="cue-caption" style={styles.cue}>
@@ -132,9 +164,9 @@ export function CombineDrillScreen({ seed }: { seed?: number }) {
           Motion-tracking consent is required before any drill. Complete the release in setup.
         </Text>
       ) : null}
-      {notice ? (
+      {shownNotice ? (
         <Text testID="drill-notice" style={styles.notice}>
-          {notice}
+          {shownNotice}
         </Text>
       ) : null}
 
@@ -166,15 +198,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.mono,
     fontSize: typography.size.caption,
     letterSpacing: typography.letterSpacing.wide,
-  },
-  joint: {
-    position: 'absolute',
-    width: sizes.jointDot,
-    height: sizes.jointDot,
-    marginLeft: -(sizes.jointDot / 2),
-    marginTop: -(sizes.jointDot / 2),
-    borderRadius: radii.pill,
-    backgroundColor: colors.skeletonJoint,
   },
   framing: { gap: spacing.xs },
   framingTrack: {
