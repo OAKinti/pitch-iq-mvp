@@ -41,7 +41,7 @@
 - [x] D4.2a after D2.3a: two-client Group Session leaderboard convergence tests on fake Realtime channels (join, leave, rejoin, out-of-order and duplicate updates)
 - [x] D6.1a after D6.0, D2.1a: highlight-clip service behind a library-agnostic `ClipEncoder` interface using the D-7 package (native module mocked) + `buildHighlightClipArgs` output checks for h264/aac/yuv420p/faststart; tests
 - [x] D6.2a after D6.0: 640×480 transparent OVR sticker component + capture service (view-shot mocked) + Instagram Stories pasteboard / TikTok Share Kit handoff service using only the allowlisted `EXPO_PUBLIC_FACEBOOK_APP_ID` / `EXPO_PUBLIC_TIKTOK_CLIENT_KEY`; tests
-- [ ] D5.1a after D2.2b, D6.2a: Maestro flows for the new testIDs (`skeleton-overlay`, `telemetry-fps`, `pose-source`, sticker/share) + WCAG contrast unit test over `src/theme/tokens.ts` dark/light pairs + reduce-motion fallbacks; tests
+- [x] D5.1a after D2.2b, D6.2a: Maestro flows for the new testIDs (`skeleton-overlay`, `telemetry-fps`, `pose-source`, sticker/share) + WCAG contrast unit test over `src/theme/tokens.ts` dark/light pairs + reduce-motion fallbacks; tests
 - [x] D7.4a after D2.0: EAS `production` profile, app.json store metadata (bundle IDs, versionCode/buildNumber, permission strings audit) and `docs/RELEASE_CHECKLIST.md` for TestFlight + Play Internal App Sharing
 
 ### Day 4 — Wed Nov 25
