@@ -142,7 +142,7 @@ Screens (all in `src/screens/`), each with a root `testID`:
 | `CombineDrillScreen` | `screen-combine` | `drill-option-ball_mastery`, `drill-option-agility_shuttle`, `simulate-toggle`, `skeleton-overlay`, `telemetry-fps`, `pose-source` (v1.1.0, D2.2b), `telemetry-phase`, `telemetry-count`, `telemetry-rate`, `telemetry-timer`, `cue-caption`, `drill-start`, `drill-view-results` |
 | `OVRCardScreen` | `screen-ovr` | `ovr-value`, `ovr-band`, `attr-<key>`, `badge-<id>`, `archetype-0`, `debrief-text`, `ovr-share`, `ovr-group` |
 | `GroupSessionScreen` | `screen-group` | `leaderboard-row-<userId>`, `crown-performance`, `crown-consistency`, `rivalry-objective` |
-| `HighlightShareScreen` | `screen-highlight` | `highlight-window`, `ffmpeg-command`, `share-instagram_stories`, `share-instagram_reels`, `share-tiktok` |
+| `HighlightShareScreen` | `screen-highlight` | `highlight-window`, `ffmpeg-command`, `share-instagram_stories`, `share-instagram_reels`, `share-tiktok`, `ovr-sticker`, `share-age-locked`, `share-summary` (D5.1a) |
 
 Navigation: `src/navigation/AppNavigator.tsx` exports `AppNavigator` and `type RouteName`.
 App state: `src/state/AppStateContext.tsx` (onboarding profile, consents, latest results, OVR).
