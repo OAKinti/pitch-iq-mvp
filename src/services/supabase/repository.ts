@@ -141,7 +141,7 @@ export class SupabaseRepository implements PitchIqRepository {
     if (resultsRes.error) throw new Error(`listGroupMembers failed: ${resultsRes.error.message}`);
     const results = (resultsRes.data ?? []) as unknown as ResultRow[];
 
-    return rows.map((row) => {
+    const stats = rows.map((row) => {
       const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       const mine = results.filter((r) => r.user_id === row.user_id);
       const days = new Set(mine.map((r) => r.submitted_at.slice(0, 10)));
@@ -152,14 +152,22 @@ export class SupabaseRepository implements PitchIqRepository {
         activeDays: [...days].sort(),
       };
     });
+    // Canonical order (CON-7): ascending userId, plain compare, independent of row order.
+    return stats.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
   }
 
   subscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void {
     let closed = false;
-    const refetch = (): void => {
-      void this.listGroupMembers(groupId)
+    let started = 0;
+    let delivered = 0;
+    // State-based convergence: every trigger refetches; latest-wins delivery (CON-5).
+    const refresh = (): void => {
+      const n = ++started;
+      this.listGroupMembers(groupId)
         .then((members) => {
-          if (!closed) onChange(members);
+          if (closed || n <= delivered) return;
+          delivered = n;
+          onChange(members);
         })
         .catch(() => undefined);
     };
@@ -168,11 +176,12 @@ export class SupabaseRepository implements PitchIqRepository {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'group_session_results' },
-        refetch,
+        // Payload is a trigger only, never data (SEC-12).
+        () => refresh(),
       )
       .subscribe((status: string) => {
         // First join and every rejoin after CHANNEL_ERROR / TIMED_OUT (REC-4).
-        if (status === 'SUBSCRIBED' && !closed) refetch();
+        if (status === 'SUBSCRIBED' && !closed) refresh();
       });
     return () => {
       if (closed) return;

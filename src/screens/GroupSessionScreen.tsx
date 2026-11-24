@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { HudPanel, NavBackButton, ScreenFrame, SectionLabel } from '../components';
 import { useAppState } from '../state/AppStateContext';
@@ -24,16 +24,19 @@ function activeDaysInWindow(member: GroupMemberStat, now: Date): number {
 export function GroupSessionScreen() {
   const { repository, now } = useAppState();
   const [members, setMembers] = useState<GroupMemberStat[]>([]);
+  const snapshotSeen = useRef(false);
 
   useEffect(() => {
     let active = true;
+    snapshotSeen.current = false;
     repository
       .listGroupMembers(DEMO_GROUP_ID)
       .then((m) => {
-        if (active) setMembers(m);
+        if (active && !snapshotSeen.current) setMembers(m);
       })
       .catch(() => undefined);
     const unsubscribe = repository.subscribeToGroup(DEMO_GROUP_ID, (m) => {
+      snapshotSeen.current = true;
       if (active) setMembers(m);
     });
     return () => {
