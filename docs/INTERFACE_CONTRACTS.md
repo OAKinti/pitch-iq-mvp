@@ -165,3 +165,5 @@ Gate: the Combine screen must refuse to start tracking until `camera_skeletal_tr
 **Schema — `supabase/migrations/003_voice_usage_rpc.sql`** (frozen): `reserve_debrief_chars(uuid, int, int default 16000) → date`, `refund_debrief_chars(uuid, date, int)`, `consume_qa_seconds(uuid, int, int default 300) → (granted, remaining)`. SECURITY DEFINER, `search_path = `, execute granted to `service_role` only.
 
 **Native packages (D2.0)**: `expo-dev-client`, `expo-build-properties` (android minSdk 26), `expo-audio`, `@shopify/react-native-skia`, `react-native-svg`, `expo-mediapipe-pose@0.5.2` (D-5); `expo-camera`, `expo-file-system`, `expo-media-library`, `react-native-view-shot`, `react-native-share` (D-7). Global jest mocks for Skia, expo-audio and expo-mediapipe-pose live in `jest.setup.js`; builders never edit it.
+
+**Group sync (D4.2a)**: `SupabaseRepository.listGroupMembers` returns ascending `userId` order; `subscribeToGroup` delivers latest-wins snapshots (CON-5..CON-8).
