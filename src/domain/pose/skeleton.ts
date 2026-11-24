@@ -2,11 +2,32 @@ import type { PoseFrame } from '../../types/contracts';
 
 /** MediaPipe POSE_CONNECTIONS restricted to body joints 11-32 (face 0-10 never drawn; SEC-2). */
 export const SKELETON_BONES: readonly (readonly [number, number])[] = [
-  [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
-  [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
-  [11, 23], [12, 24], [23, 24],
-  [23, 25], [25, 27], [27, 29], [29, 31], [27, 31],
-  [24, 26], [26, 28], [28, 30], [30, 32], [28, 32],
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [15, 17],
+  [15, 19],
+  [15, 21],
+  [17, 19],
+  [12, 14],
+  [14, 16],
+  [16, 18],
+  [16, 20],
+  [16, 22],
+  [18, 20],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  [23, 25],
+  [25, 27],
+  [27, 29],
+  [29, 31],
+  [27, 31],
+  [24, 26],
+  [26, 28],
+  [28, 30],
+  [30, 32],
+  [28, 32],
 ];
 
 const FIRST_BODY_JOINT = 11;
@@ -54,7 +75,8 @@ export function projectSkeleton(
 
   const byIndex = new Map<number, ProjectedJoint>();
   frame.landmarks.forEach((lm, index) => {
-    if (index < FIRST_BODY_JOINT || lm.visibility < minVis) return;
+    // `!(v >= min)` fails closed: NaN visibility on an unsanitized frame is never projected (SEC-2).
+    if (index < FIRST_BODY_JOINT || !(lm.visibility >= minVis)) return;
     byIndex.set(index, {
       index,
       x: (mirrored ? 1 - lm.x : lm.x) * iw * s + ox,

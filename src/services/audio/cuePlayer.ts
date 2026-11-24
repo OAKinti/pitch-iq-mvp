@@ -130,7 +130,7 @@ export function createCuePlayer(opts: { sources: CueSourceMap; deps?: CuePlayerD
       try {
         if (current && current !== player) stopPlayer(current);
         current = null;
-        player.seekTo(0);
+        safe(() => player.seekTo(0)); // FAIL-8: an async seekTo rejection must not go unhandled
         player.play();
         current = player;
         return true;

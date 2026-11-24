@@ -108,6 +108,24 @@ describe('cuePlayer', () => {
     expect(() => cp.play('ready_go')).not.toThrow();
   });
 
+  it('swallows an async seekTo rejection on play (FAIL-8)', async () => {
+    const { cp, made } = setup();
+    await cp.prepare('captain');
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      (made[0]!.p.seekTo as jest.Mock).mockImplementation(() =>
+        Promise.reject(new Error('seek failed')),
+      );
+      expect(cp.play('ready_go')).toBe(true);
+      await new Promise((r) => setImmediate(r));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(made[0]!.p.play).toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('survives throwing creation, prewarm, and audio mode', async () => {
     const p = mkPlayer();
     (p.play as jest.Mock).mockImplementation(() => {

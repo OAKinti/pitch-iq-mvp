@@ -59,7 +59,9 @@ describe('projectSkeleton', () => {
     lm[11] = { x: 0.25, y: 0.5, z: 0, visibility: 1 };
     const view = { width: 100, height: 200 };
     const plain = projectSkeleton({ ...f, landmarks: lm }, view).joints.find((j) => j.index === 11);
-    const mir = projectSkeleton({ ...f, landmarks: lm }, view, { mirrored: true }).joints.find((j) => j.index === 11);
+    const mir = projectSkeleton({ ...f, landmarks: lm }, view, { mirrored: true }).joints.find(
+      (j) => j.index === 11,
+    );
     expect(plain?.x).toBeCloseTo(25);
     expect(mir?.x).toBeCloseTo(75);
     expect(mir?.y).toBeCloseTo(plain?.y ?? NaN);
@@ -72,14 +74,31 @@ describe('projectSkeleton', () => {
     const out = projectSkeleton({ ...f, landmarks: lm }, { width: 100, height: 200 });
     expect(out.joints.some((j) => j.index === 13)).toBe(false);
     expect(out.bones.some((b) => b.from === 13 || b.to === 13)).toBe(false);
-    const lenient = projectSkeleton({ ...f, landmarks: lm }, { width: 100, height: 200 }, { minVisibility: 0.1 });
+    const lenient = projectSkeleton(
+      { ...f, landmarks: lm },
+      { width: 100, height: 200 },
+      { minVisibility: 0.1 },
+    );
     expect(lenient.joints.some((j) => j.index === 13)).toBe(true);
+  });
+
+  it('fails closed on NaN visibility (unsanitized frame)', () => {
+    const f = frame();
+    const lm = [...f.landmarks];
+    lm[14] = { x: 0.5, y: 0.5, z: 0, visibility: Number.NaN };
+    const out = projectSkeleton({ ...f, landmarks: lm }, { width: 100, height: 200 });
+    expect(out.joints.some((j) => j.index === 14)).toBe(false);
+    expect(out.bones.some((b) => b.from === 14 || b.to === 14)).toBe(false);
   });
 
   it('returns an empty skeleton for a zero view or image', () => {
     expect(projectSkeleton(frame(), { width: 0, height: 100 })).toEqual({ joints: [], bones: [] });
     expect(projectSkeleton(frame(), { width: 100, height: -1 })).toEqual({ joints: [], bones: [] });
-    expect(projectSkeleton(frame({ imageWidth: 0 }), { width: 100, height: 100 }).joints).toHaveLength(0);
-    expect(projectSkeleton(frame({ imageHeight: 0 }), { width: 100, height: 100 }).joints).toHaveLength(0);
+    expect(
+      projectSkeleton(frame({ imageWidth: 0 }), { width: 100, height: 100 }).joints,
+    ).toHaveLength(0);
+    expect(
+      projectSkeleton(frame({ imageHeight: 0 }), { width: 100, height: 100 }).joints,
+    ).toHaveLength(0);
   });
 });
