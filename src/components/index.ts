@@ -9,3 +9,4 @@ export {
   TelemetryReadout,
 } from './HudPrimitives';
 export { NavBackButton } from './NavBackButton';
+export { SkeletonOverlay, type SkeletonOverlayProps } from './SkeletonOverlay';
