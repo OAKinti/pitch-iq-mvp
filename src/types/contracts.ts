@@ -12,7 +12,7 @@
  *    by `sanitizePoseFrame` before any frame leaves the CV layer.
  */
 
-export const CONTRACT_VERSION = '1.0.0' as const;
+export const CONTRACT_VERSION = '1.1.0' as const; // v1.1.0 (Nov 24, D-6): debrief wire types
 
 /* ────────────────────────────── Sport scope ────────────────────────────── */
 
@@ -383,6 +383,83 @@ export interface WearableDailySummary {
   /** 0–21 WHOOP-style day strain (normalized for other sources). */
   readonly strain: number | null;
 }
+
+/* ─────────────────── Debrief wire format (v1.1.0, D-6) ─────────────────── */
+
+/**
+ * Body of POST /functions/v1/voice-debrief. The prompt is built SERVER-side from these
+ * whitelisted numbers/enums only; no ids, names or free text cross the wire (SEC-5).
+ * A body with a `system` or `user` key is rejected with 400 legacy_prompt_rejected.
+ */
+export type DebriefDrillMetrics =
+  | {
+      readonly drill: 'ball_mastery';
+      readonly touches: number;
+      readonly touchesPerMinute: number;
+      readonly footBalance: number;
+      readonly rhythmCv: number;
+      readonly hipSway: number;
+    }
+  | {
+      readonly drill: 'agility_shuttle';
+      readonly totalTimeS: number;
+      readonly legs: number;
+      readonly peakSpeedMps: number;
+      readonly meanTurnTimeMs: number;
+      readonly splitCv: number;
+      readonly fatigueIndex: number;
+    };
+
+/** Wearable summary as sent to the debrief. Strava can never appear here (SEC-6). */
+export interface DebriefWearable {
+  readonly source: IngestionSource;
+  readonly date: string; // YYYY-MM-DD
+  readonly restingHr: number | null;
+  readonly hrv: number | null;
+  readonly sleepMin: number | null;
+  readonly recovery: number | null;
+  readonly strain: number | null;
+}
+
+export interface DebriefRequest {
+  readonly v: 2;
+  readonly persona: CoachPersona;
+  readonly metrics: DebriefDrillMetrics;
+  readonly ovr: {
+    readonly value: number;
+    readonly band: RatingBand;
+    readonly position: PlayerPosition;
+    readonly attributes: AttributeVector;
+  };
+  readonly badges: readonly BadgeId[];
+  /** Name must match ^[A-Za-z][A-Za-z .'-]{0,39}$ server-side. */
+  readonly archetype: { readonly name: string; readonly similarity: number } | null;
+  readonly wearables: readonly DebriefWearable[];
+}
+
+export type DebriefFailureReason =
+  | 'monthly_cap'
+  | 'refused'
+  | 'invalid_request'
+  | 'invalid_source'
+  | 'legacy_prompt_rejected'
+  | 'body_too_large'
+  | 'unauthorized'
+  | 'rate_limited'
+  | 'llm_error';
+
+/**
+ * HTTP: 200 ok | 200 monthly_cap | 200 refused | 400 invalid_request, invalid_source,
+ * legacy_prompt_rejected | 401 unauthorized | 405 | 413 body_too_large | 429 rate_limited | 502 llm_error.
+ */
+export type DebriefResponse =
+  | {
+      readonly ok: true;
+      readonly text: string;
+      readonly audioUrl: string | null;
+      readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
+    }
+  | { readonly ok: false; readonly reason: DebriefFailureReason };
 
 /* ───────────────────────────── Highlights ───────────────────────────── */
 
