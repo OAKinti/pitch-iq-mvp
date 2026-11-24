@@ -18,7 +18,7 @@
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
-- [ ] [HUMAN GATE 1] Owner: PR #1 merged (done Nov 23); send repo to collaborator; activate Routine 2 (gatekeeper) per `docs/CLOUD_ROUTINES_SETUP.md`; keep Routine 1 paused while a local Agenticverse wave run is active (it would build the same tasks twice)
+- [x] [HUMAN GATE 1] Owner: PR #1 merged (done Nov 23); send repo to collaborator; activate Routine 2 (gatekeeper) per `docs/CLOUD_ROUTINES_SETUP.md`; keep Routine 1 paused while a local Agenticverse wave run is active (it would build the same tasks twice)
 
 ## Track: software
 ### Day 2–3 — Mon–Tue Nov 23–24
@@ -81,6 +81,7 @@
 - D-5 (Nov 24) **ACCEPTED by owner Nov 24:** Day 2–3 live pose uses `expo-mediapipe-pose@0.5.2` (Expo Module wrapping native MediaPipe Pose Landmarker; own camera session; peer `react-native-svg ^15.15.4`) instead of a `react-native-vision-camera` frame processor → MediaPipe, because the v3/v4 MediaPipe frame-processor plugins do not build against vision-camera v5. vision-camera 5.2.4 (+ -worklets, -resizer, nitro-modules 0.37.2, nitro-image 0.15.2) is deferred to D6.1 recording, which must solve the single-camera-session constraint (never mount two camera sessions). Skia stays `@shopify/react-native-skia` 2.14.0.
 - D-6 (Nov 24) **ACCEPTED by owner Nov 24:** contract v1.1.0 (lands in D2.0). The debrief prompt is built server-side (`voice-debrief` accepts only `DebriefRequest` v2 and rejects `{system,user}`), `DebriefTransport.requestDebrief(request)` replaces `(prompt, persona)`, `buildDebriefPrompt` is removed from the client barrel, and migration `003_voice_usage_rpc.sql` adds service-role-only RPCs `reserve_debrief_chars`, `refund_debrief_chars`, `consume_qa_seconds` (atomic 16 000-char and 300–600 s monthly caps).
 - D-8 (Nov 24) **ACCEPTED by owner Nov 24:** local sprint work runs as Agenticverse waves (`docs/AGENTICVERSE_SPRINT.md`): Day 4–7 agent halves (`…a` lines) are pulled forward; builders share one working tree with disjoint write paths and the orchestrator commits each slice; each wave gets one cross-family audit; D2.0 ships as its own PR so the Dev Client build starts early. Routine 1 is a paused backstop during wave runs.
+- D-7 (Nov 24) **ACCEPTED by owner Nov 24; packages folded into D2.0 (D6.0, research `.agenticverse/research/D6.0-d7-strategy.md`; versions checked with `npm view` Nov 24):** no FFmpeg, no Nitro. (1) Recording: `expo-camera` 58.0.14 `CameraView mode="video"` + `recordAsync({maxDuration: 15})`, **sequenced** with `expo-mediapipe-pose` (it has no recording API): one camera-mode state machine `idle | pose | record`, unmount `PoseCameraView` and wait for teardown before mounting `CameraView` (D-5 holds). vision-camera 5.2.4 is dropped. (2) Encoder: local Expo Module `modules/highlight-encoder` (iOS AVAssetReader→AVAssetWriter h264/AAC/420v, `shouldOptimizeForNetworkUse`; Android Media3 Transformer, moov-first) behind `ClipEncoder`; rejected: ffmpeg-kit forks (D-4, +30 MB, LGPL), `react-native-video-trim` 8.3.1 (wraps FFmpegKit), `react-native-compressor` 2.0.6 (no trim, Nitro). (3) Sticker: `react-native-view-shot` 6.2.1 (`captureRef` png 640×480, transparent). (4) Share: `react-native-share` 12.3.1 for Instagram Stories (omit empty `attributionURL`); Instagram Reels + TikTok Share Kit v2 in local module `modules/social-handoff` + config plugin (no maintained New-Arch TikTok wrapper exists); `expo-media-library` 58.0.14 (iOS PHAsset for TikTok, `granularPermissions: []`), `expo-file-system` 58.0.14. Install line: `npx expo install expo-camera expo-file-system expo-media-library react-native-view-shot react-native-share`. The two local modules need one more Dev Client rebuild after D6.1. Risks: TikTok Share Kit app review + iOS universal link (start now), R8 keep rules, Play `READ_MEDIA_VIDEO` policy.
 
 ## Blockers
 - ~~B-1~~ Resolved Nov 22: owner created private repo `OAKinti/pitch-iq-mvp`; `main` is the default branch.
@@ -88,6 +89,7 @@
 
 ## Contract changes
 - v1.0.0 frozen Nov 22.
+- v1.1.0 (Nov 24, D-6): `DebriefRequest`/`DebriefResponse` wire types in `src/types/contracts.ts`, migration `003_voice_usage_rpc.sql` (service-role-only quota RPCs), `DebriefTransport` v2 + `buildDebriefRequest` (code lands in D2.5a), CV slice row, new Combine testIDs `skeleton-overlay`/`telemetry-fps`/`pose-source`. D2.0 also installed the D-7 packages; Expo pinned `react-native-view-shot` to 6.1.1 (SDK 58 bundled version) instead of npm-latest 6.2.1.
 
 ## Cold start (any machine / cloud)
 1. `git clone https://github.com/OAKinti/pitch-iq-mvp.git && cd pitch-iq-mvp && npm ci`

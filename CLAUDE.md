@@ -32,6 +32,7 @@ npm run verify             # all four, in order
 | `src/types/contracts.ts` | frozen | change ⇒ update `docs/INTERFACE_CONTRACTS.md` + bump `CONTRACT_VERSION` |
 | `src/theme/tokens.ts` | frozen | the only place raw colors/sizes live |
 | `src/domain/**` | A | pure TS math, no React/timers/IO; skill `soccer-cv-math` |
+| `src/services/cv/**`, `src/__tests__/services/cv/**` | CV (Person A) | carve-out from B; only place that imports expo-mediapipe-pose; emits sanitized PoseFrame only |
 | `src/services/**`, `supabase/functions/**` | B | IO behind interfaces; Demo Mode when keys absent |
 | `src/components/**`, `src/screens/**`, `src/navigation/**`, `src/state/**` | C | tokens only; every interactive element has a `testID`; skill `design-tokens` |
 | `supabase/migrations/**` | frozen | RLS on every table |
