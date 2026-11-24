@@ -49,7 +49,9 @@ npm run verify             # all four, in order
 ## Workflow
 - Branches: `main` (protected, human-merged), `claude/*` (agent work), `feat/*` (humans). Never push to `main`, never `--force`, never `sudo`.
 - Windows-first: paths contain a space (`D:\company ideas\pitch-iq-mvp`) — always quote paths. Hooks are Node `.mjs` (cross-platform).
-- Human gates: an unchecked `- [ ] [HUMAN GATE N]` in `SPRINT_STATE.md` blocks every later task. Agents stop there.
+- Human gates: an unchecked `- [ ] [HUMAN GATE N]` in `SPRINT_STATE.md` blocks per its parse rules: the `## Gates` section blocks every track, and a gate inside a track blocks the later lines of that track only. Agents stop there.
+- Models: run `/next-sprint-day` and routine sessions on Sonnet 5.5; Opus 5.5 only for `cad-engineer` and `security-privacy-auditor`, and as the orchestrator of a local Agenticverse wave run; Haiku 5.5 for `code-scout`.
+- Agenticverse (local only): multi-task sprint work runs as waves per `docs/AGENTICVERSE_SPRINT.md` (handoff files in `.agenticverse/`; briefs and the sprint contract are committed).
 - Skills: `next-sprint-day` (resume the sprint), `sprint-handoff` (update state), `design-tokens`, `soccer-cv-math`, `eyewear-cad-rulebook`.
-- Agents: `vertical-builder` (sonnet, worktree, one slice), `code-scout` (haiku, read-only), `ui-qa-verifier` (sonnet), `security-privacy-auditor` (opus, Day 7 only), `cad-engineer` (opus).
+- Agents: `vertical-builder` (sonnet, shared tree, one slice, disjoint paths), `code-scout` (haiku, read-only), `ui-qa-verifier` (sonnet), `security-privacy-auditor` (opus, Day 7 only), `cad-engineer` (opus).
 - Docs: `docs/INTERFACE_CONTRACTS.md`, `docs/MCP_SETUP.md`, `docs/CLOUD_ROUTINES_SETUP.md`, `COLLABORATOR_SETUP.md`.

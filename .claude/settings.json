@@ -12,6 +12,13 @@
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git pull --ff-only:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm ci:*)",
       "PowerShell(npm run typecheck)",
       "PowerShell(npm test)",
       "PowerShell(npm run verify)"
@@ -22,6 +29,9 @@
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push origin main:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push -u origin HEAD:main:*)",
       "Bash(sudo:*)"
     ]
   },

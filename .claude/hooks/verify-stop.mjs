@@ -3,6 +3,7 @@
  * Stop hook: refuse to end the turn while TypeScript fails to compile.
  *  - Skips when stop_hook_active is true (prevents infinite re-entry loops).
  *  - Skips when there is no package.json or node_modules (fresh clone / cloud cold start).
+ *  - Skips when git reports no uncommitted .ts/.tsx/tsconfig/package files.
  * Exit 2 = block stop and feed errors back to Claude. Exit 0 = allow stop.
  */
 import { spawnSync } from 'node:child_process';
@@ -26,6 +27,15 @@ const root = resolve(
 );
 const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 if (!existsSync(join(root, 'package.json')) || !existsSync(tsc)) process.exit(0);
+
+// Skip the ~1 min typecheck when no TypeScript input is uncommitted (most stops in a long session).
+// If git itself fails, fall through and typecheck.
+const dirty = spawnSync(
+  'git',
+  ['status', '--porcelain', '--untracked-files=all', '--', '*.ts', '*.tsx', 'tsconfig.json', 'package.json', 'package-lock.json'],
+  { cwd: root, encoding: 'utf8', timeout: 20000 },
+);
+if (dirty.status === 0 && !dirty.stdout.trim()) process.exit(0);
 
 const res = spawnSync(process.execPath, [tsc, '--noEmit', '-p', join(root, 'tsconfig.json')], {
   cwd: root,

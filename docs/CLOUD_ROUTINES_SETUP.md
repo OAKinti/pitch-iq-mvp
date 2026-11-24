@@ -4,8 +4,12 @@ Anthropic renamed **Routines** to **scheduled tasks**. They are still managed at
 [claude.ai/code/routines](https://claude.ai/code/routines) or with `/schedule` (alias `/routines`) in the CLI.
 The feature is a research preview, so labels may shift; this guide was checked against the docs on Nov 22 2026.
 Each run is a full Claude Code cloud session on a fresh clone. The repo's committed `CLAUDE.md`,
-`.claude/skills/`, `.claude/agents/`, `.claude/settings.json` hooks and `.mcp.json` all load
-automatically, which is why only this one repo should be attached.
+`.claude/skills/`, `.claude/agents/` and `.claude/settings.json` hooks all load
+automatically, which is why only this one repo should be attached. There is no project `.mcp.json`; the CAD server is registered per machine (`docs/MCP_SETUP.md`).
+
+> **Since Nov 24 the main engine is the local Agenticverse wave run (`docs/AGENTICVERSE_SPRINT.md`).** Routine 1 is a backstop.
+> Keep it **paused** while a wave run is active, because it reads `main` and would rebuild tasks that are in flight on a `claude/sprint-*` branch.
+> Turn it back on between wave runs, or once only one-task-a-night work is left. Routine 2 (gatekeeper) stays on all the time.
 
 ## 5-minute setup checklist
 
@@ -21,7 +25,7 @@ automatically, which is why only this one repo should be attached.
    - *Secrets*: Day 1–3 routines need **none** (Demo Mode). Later, if a task must call Supabase or ElevenLabs during a run, add those keys as **network secrets** on `pitchiq-ci`, never as plain environment variables. Plain variables are visible to anyone using the environment. Never use the shared **Default** environment for secrets.
 6. **Connectors.** All connected claude.ai connectors are attached by default. **Remove all of them** for both routines. They need only GitHub, which comes through the repo, and an attached connector can be used for writes.
 7. Create the two tasks below. For each, select repo `OAKinti/pitch-iq-mvp` (only this one), environment `pitchiq-ci`, and model **Claude Sonnet 5.5** at the default effort.
-8. Use **Run now** once on Routine 1 and open the run from *History*. It should report `BLOCKED by HUMAN GATE 2` or run one task. Either result confirms the wiring works.
+8. Use **Run now** once on Routine 1 and open the run from *History*. It should report `BLOCKED by HUMAN GATE 1` (until Day 1 is merged) or run one software task. Either result confirms the wiring works.
 
 Limits: 100 scheduled runs per hour per account; 30 per hour per task for *Run now* and API fires. GitHub events have hourly caps; events beyond them are dropped. Runs count against your plan usage.
 
@@ -36,9 +40,9 @@ Limits: 100 scheduled runs per hour per account; 30 per hour per task for *Run n
 ```text
 You are the nightly sprint worker for the PitchIQ MVP repository.
 
-1. Read CLAUDE.md and SPRINT_STATE.md in full, then follow .claude/skills/next-sprint-day/SKILL.md exactly.
-2. Find the first unchecked task in SPRINT_STATE.md. If any unchecked "- [ ] [HUMAN GATE N]" line appears before it, print "BLOCKED by HUMAN GATE N: <text>" and stop. Do not edit code, do not commit, do not open a PR.
-3. Also stop cleanly without edits if that task is tagged [device], [local-only], or [secret:NAME] where NAME is not set in this environment. This cloud container has no simulator, phone, or CAD MCP server.
+1. Read SPRINT_STATE.md in full (CLAUDE.md is already loaded), then follow .claude/skills/next-sprint-day/SKILL.md exactly.
+2. Use only the "## Track: software" section. If an unchecked gate under "## Gates" exists, or an unchecked "- [ ] [HUMAN GATE N]" line appears before the track's first unchecked task, print "BLOCKED by HUMAN GATE N: <text>" and stop. Do not edit code, do not commit, do not open a PR.
+3. Skip lines tagged [human:A] or [human:B] and agent lines whose "after Dx" tasks are not all ticked; take the next runnable line. Stop cleanly without edits if that task is tagged [device], [local-only], or [secret:NAME] where NAME is not set in this environment. This cloud container has no simulator, phone, or CAD MCP server.
 4. Otherwise execute exactly ONE unblocked software task. Use the vertical-builder agent for feature work. Keep changes inside that task's slice.
 5. Run and record exit codes: npm run typecheck, npm test, npm run lint:tokens, npm run check:compliance. If any fails, fix it or revert your change. Never commit a red build.
 6. Update SPRINT_STATE.md per .claude/skills/sprint-handoff/SKILL.md: tick the task only if all gates passed, and add a session-log entry with commands and exit codes.
