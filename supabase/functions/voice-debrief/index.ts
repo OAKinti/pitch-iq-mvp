@@ -6,6 +6,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { handleDebrief, type CompletionResult, type DebriefDeps } from '../_shared/voiceCore.ts';
+import { formatUsageLogLine, toUsageRecord } from '../_shared/usageTelemetry.ts';
 
 const MODEL = 'claude-haiku-5-5';
 const VOICE_ENV: Record<string, string> = {
@@ -120,6 +121,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     const out = await handleDebrief(await req.text(), userId, deps);
+    const rec = toUsageRecord(out);
+    if (rec) console.log(formatUsageLogLine(rec));
     return json(out.body, out.status);
   } catch (_e) {
     return json({ ok: false, reason: 'llm_error' }, 502);
