@@ -23,9 +23,19 @@ const SEED: readonly {
   bestOvr: number;
   daysAgo: readonly number[];
 }[] = [
-  { userId: 'demo-maya', displayName: 'Maya Rivera', bestOvr: 78.4, daysAgo: [0, 1, 3, 4, 6, 9, 12, 15, 21, 30, 44, 60, 75] },
+  {
+    userId: 'demo-maya',
+    displayName: 'Maya Rivera',
+    bestOvr: 78.4,
+    daysAgo: [0, 1, 3, 4, 6, 9, 12, 15, 21, 30, 44, 60, 75],
+  },
   { userId: 'demo-jonas', displayName: 'Jonas Weber', bestOvr: 83.1, daysAgo: [2, 9, 20, 41, 70] },
-  { userId: 'demo-amara', displayName: 'Amara Okafor', bestOvr: 71.9, daysAgo: [0, 2, 5, 7, 10, 14, 19, 33, 50, 66, 88] },
+  {
+    userId: 'demo-amara',
+    displayName: 'Amara Okafor',
+    bestOvr: 71.9,
+    daysAgo: [0, 2, 5, 7, 10, 14, 19, 33, 50, 66, 88],
+  },
   { userId: 'demo-kenji', displayName: 'Kenji Tanaka', bestOvr: 66.2, daysAgo: [1, 8, 29, 57] },
   { userId: DEMO_USER_ID, displayName: 'You', bestOvr: 0, daysAgo: [] },
 ];
@@ -145,15 +155,28 @@ export class SupabaseRepository implements PitchIqRepository {
   }
 
   subscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void {
+    let closed = false;
+    const refetch = (): void => {
+      void this.listGroupMembers(groupId)
+        .then((members) => {
+          if (!closed) onChange(members);
+        })
+        .catch(() => undefined);
+    };
     const channel = this.client
       .channel(`group:${groupId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_session_results' }, () => {
-        void this.listGroupMembers(groupId)
-          .then(onChange)
-          .catch(() => undefined);
-      })
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_session_results' },
+        refetch,
+      )
+      .subscribe((status: string) => {
+        // First join and every rejoin after CHANNEL_ERROR / TIMED_OUT (REC-4).
+        if (status === 'SUBSCRIBED' && !closed) refetch();
+      });
     return () => {
+      if (closed) return;
+      closed = true;
       void this.client.removeChannel(channel);
     };
   }
