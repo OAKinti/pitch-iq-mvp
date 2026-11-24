@@ -97,7 +97,7 @@ export function GroupSessionScreen() {
             testID={`leaderboard-row-${m.userId}`}
             style={[styles.row, m.userId === DEMO_USER_ID && styles.rowMe]}
           >
-            <Text style={styles.rank}>{i + 1}</Text>
+            <Text style={[styles.rank, m.userId === DEMO_USER_ID && styles.rankMe]}>{i + 1}</Text>
             <Text style={styles.name}>{m.displayName}</Text>
             <Text style={styles.score}>{m.bestOvr.toFixed(1)}</Text>
           </View>
@@ -141,6 +141,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.bodyLg,
     ...typography.tabular,
   },
+  rankMe: { color: colors.textSecondary },
   name: { flex: 1, color: colors.textPrimary, fontSize: typography.size.bodyLg },
   score: {
     color: colors.accent,

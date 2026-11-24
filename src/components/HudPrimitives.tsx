@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -127,6 +128,7 @@ export function HudButton({
   variant?: ButtonVariant;
   disabled?: boolean;
 }) {
+  const reduced = useReducedMotion();
   const scale = useSharedValue(1);
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
@@ -138,9 +140,11 @@ export function HudButton({
       disabled={disabled}
       onPress={disabled ? undefined : onPress}
       onPressIn={() => {
+        if (reduced) return;
         scale.value = withSpring(motion.pressScale, motion.spring);
       }}
       onPressOut={() => {
+        if (reduced) return;
         scale.value = withSpring(1, motion.spring);
       }}
     >
@@ -180,10 +184,11 @@ export function HudToggle({
   onChange: (next: boolean) => void;
   testID: string;
 }) {
+  const reduced = useReducedMotion();
   const knob = useSharedValue(value ? 1 : 0);
   useEffect(() => {
-    knob.value = withTiming(value ? 1 : 0, { duration: motion.duration.fast });
-  }, [value, knob]);
+    knob.value = reduced ? (value ? 1 : 0) : withTiming(value ? 1 : 0, { duration: motion.duration.fast });
+  }, [value, knob, reduced]);
   const knobStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: knob.value * (sizes.toggleWidth - sizes.toggleKnob - spacing.xs) }],
   }));
@@ -271,10 +276,11 @@ export function TelemetryReadout({
 
 export function StatBar({ label, value, testID }: { label: string; value: number; testID?: string }) {
   const pct = Math.max(0, Math.min(100, value));
+  const reduced = useReducedMotion();
   const fill = useSharedValue(0);
   useEffect(() => {
-    fill.value = withTiming(pct, { duration: motion.duration.slow });
-  }, [pct, fill]);
+    fill.value = reduced ? pct : withTiming(pct, { duration: motion.duration.slow });
+  }, [pct, fill, reduced]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value}%` }));
   return (
     <View testID={testID} style={styles.statRow}>
