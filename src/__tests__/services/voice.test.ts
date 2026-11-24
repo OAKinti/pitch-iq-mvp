@@ -10,16 +10,34 @@ import {
   estimateDebriefCostUsd,
   estimateMonthlyVoiceCostUsd,
 } from '../../services/voice/costModel';
-import { buildDebriefPrompt, templateDebrief, truncateAtWord } from '../../services/voice/debriefPrompt';
+import {
+  buildDebriefRequest,
+  templateDebrief,
+  truncateAtWord,
+} from '../../services/voice/debriefPrompt';
 import { createQaBudget } from '../../services/voice/qaBudget';
-import { createEdgeFunctionTransport, type DebriefTransport } from '../../services/voice/transport';
+import {
+  DEBRIEF_TIMEOUT_MS,
+  createEdgeFunctionTransport,
+  type DebriefTransport,
+} from '../../services/voice/transport';
 import { createVoiceCoach } from '../../services/voice/voiceCoach';
 import { archetype, badges, ballResult, ovr, shuttleResult } from './fixtures';
 
 const PERSONA_IDS: CoachPersona[] = ['captain', 'drill_sergeant', 'hype'];
 const CUE_IDS: CueId[] = [
-  'calibrate_step_back', 'calibrate_hold_still', 'ready_go', 'out_of_frame', 'back_in_frame',
-  'rhythm_good', 'pace_up', 'switch_feet', 'halfway', 'ten_seconds', 'final_push', 'turn_sharp',
+  'calibrate_step_back',
+  'calibrate_hold_still',
+  'ready_go',
+  'out_of_frame',
+  'back_in_frame',
+  'rhythm_good',
+  'pace_up',
+  'switch_feet',
+  'halfway',
+  'ten_seconds',
+  'final_push',
+  'turn_sharp',
   'drill_complete',
 ];
 
@@ -65,7 +83,11 @@ describe('costModel', () => {
     expect(estimateDebriefCostUsd(0, 0, 0)).toBe(0);
   });
   it('keeps a heavy user under $1.50/month (< 10% of $14.99)', () => {
-    const cost = estimateMonthlyVoiceCostUsd({ debriefsPerMonth: 30, avgChars: 400, qaMinutes: 10 });
+    const cost = estimateMonthlyVoiceCostUsd({
+      debriefsPerMonth: 30,
+      avgChars: 400,
+      qaMinutes: 10,
+    });
     expect(cost).toBeLessThan(1.5);
     expect(cost).toBeLessThan(SUBSCRIPTION_USD_PER_MONTH * 0.1);
     expect(cost).toBeGreaterThan(0.5);
@@ -73,37 +95,56 @@ describe('costModel', () => {
 });
 
 describe('debriefPrompt', () => {
-  const input = { persona: 'captain' as const, result: ballResult, ovr, badges, topArchetype: archetype };
+  const input = {
+    persona: 'captain' as const,
+    result: ballResult,
+    ovr,
+    badges,
+    topArchetype: archetype,
+  };
 
-  it('builds a safe prompt with compact JSON and no identifiers', () => {
-    const { system, user } = buildDebriefPrompt(input);
-    expect(system).toContain('2 to 3 sentences');
-    expect(system).toContain(String(DEBRIEF_MAX_CHARS));
-    expect(system).toMatch(/medical/i);
-    const parsed = JSON.parse(user);
-    expect(parsed.metrics.touches).toBe(62);
-    expect(parsed.badges).toEqual(['metronome']);
-    expect(parsed.archetype.name).toBe('The Playmaker');
-    expect(user).not.toContain('r1');
+  it('builds a wire request with whitelisted numbers/enums only', () => {
+    const req = buildDebriefRequest(input);
+    expect(req.v).toBe(2);
+    expect(req.persona).toBe('captain');
+    expect(req.metrics).toEqual({
+      drill: 'ball_mastery',
+      touches: 62,
+      touchesPerMinute: 124,
+      footBalance: 0.9,
+      rhythmCv: 0.12,
+      hipSway: 0.03,
+    });
+    expect(req.badges).toEqual(['metronome']);
+    expect(req.archetype).toEqual({ name: 'The Playmaker', similarity: 0.91 });
+    expect(req.wearables).toEqual([]);
+    const wire = JSON.stringify(req);
+    expect(wire).not.toContain('r1');
+    expect(wire).not.toContain('system');
+    expect(wire).not.toContain('"user"');
   });
 
   it('includes shuttle metrics and wearable summary', () => {
-    const { user } = buildDebriefPrompt({
+    const p = buildDebriefRequest({
       ...input,
       persona: 'hype',
       result: shuttleResult,
       topArchetype: undefined,
-      wearables: [{ source: 'whoop', date: '2026-11-21', restingHeartRateBpm: 50, hrvRmssdMs: 80, sleepMinutes: null, recoveryScore: 90, strain: null }],
+      wearables: [
+        { source: 'whoop', date: '2026-11-21', restingHeartRateBpm: 50, hrvRmssdMs: 80, sleepMinutes: null, recoveryScore: 90, strain: null },
+      ],
     });
-    const p = JSON.parse(user);
-    expect(p.metrics.drill).toBe('agility_shuttle');
+    expect(p.metrics).toEqual({
+      drill: 'agility_shuttle',
+      totalTimeS: 9.8,
+      legs: 6,
+      peakSpeedMps: 5.4,
+      meanTurnTimeMs: 320,
+      splitCv: 0.05,
+      fatigueIndex: 0.1,
+    });
     expect(p.archetype).toBeNull();
-    expect(p.wearables[0].recovery).toBe(90);
-  });
-
-  it('uses the persona voice', () => {
-    expect(buildDebriefPrompt({ ...input, persona: 'drill_sergeant' }).system).toContain('Drill Sergeant');
-    expect(buildDebriefPrompt({ ...input, persona: 'hype' }).system).toContain('Hype Coach');
+    expect(p.wearables[0]).toEqual({ source: 'whoop', date: '2026-11-21', restingHr: 50, hrv: 80, sleepMin: null, recovery: 90, strain: null });
   });
 
   it('template debriefs are persona flavoured, deterministic and <= 400 chars', () => {
@@ -151,27 +192,57 @@ describe('qaBudget', () => {
 });
 
 describe('transport', () => {
-  const mk = (invoke: jest.Mock) => createEdgeFunctionTransport({ functions: { invoke } } as unknown as SupabaseClient);
-  const prompt = { system: 's', user: 'u' };
+  const mk = (invoke: jest.Mock) =>
+    createEdgeFunctionTransport({ functions: { invoke } } as unknown as SupabaseClient);
+  const request = buildDebriefRequest({ persona: 'hype', result: ballResult, ovr, badges });
+  const okRes = (extra: object = {}) => ({
+    data: { ok: true, text: 'hi', audioUrl: 'https://a/b.mp3', usage: { inputTokens: 10, outputTokens: 5 }, ...extra },
+    error: null,
+  });
 
-  it('invokes voice-debrief and maps the response', async () => {
-    const invoke = jest.fn().mockResolvedValue({
-      data: { text: 'hi', audioUrl: 'https://a/b.mp3', usage: { input_tokens: 10, output_tokens: 5 } },
-      error: null,
-    });
-    const r = await mk(invoke).requestDebrief(prompt, 'hype');
-    expect(invoke).toHaveBeenCalledWith('voice-debrief', { body: { system: 's', user: 'u', persona: 'hype' } });
+  it('invokes voice-debrief with the request as body and maps the response', async () => {
+    const invoke = jest.fn().mockResolvedValue(okRes());
+    const r = await mk(invoke).requestDebrief(request);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('voice-debrief', { body: request });
     expect(r).toEqual({ text: 'hi', audioUri: 'https://a/b.mp3', inputTokens: 10, outputTokens: 5 });
   });
-  it('defaults missing audio/usage', async () => {
-    const r = await mk(jest.fn().mockResolvedValue({ data: { text: 'hi' }, error: null })).requestDebrief(prompt, 'captain');
+  it('defaults missing audio and usage', async () => {
+    const r = await mk(jest.fn().mockResolvedValue({ data: { ok: true, text: 'hi' }, error: null })).requestDebrief(request);
     expect(r).toEqual({ text: 'hi', audioUri: null, inputTokens: 0, outputTokens: 0 });
   });
-  it('throws on error, refusal and null text', async () => {
-    await expect(mk(jest.fn().mockResolvedValue({ data: null, error: { message: 'bad' } })).requestDebrief(prompt, 'captain')).rejects.toThrow('bad');
-    await expect(mk(jest.fn().mockResolvedValue({ data: { text: null, refused: true }, error: null })).requestDebrief(prompt, 'captain')).rejects.toThrow();
-    await expect(mk(jest.fn().mockResolvedValue({ data: { text: 'x', refused: true }, error: null })).requestDebrief(prompt, 'captain')).rejects.toThrow();
-    await expect(mk(jest.fn().mockResolvedValue({ data: null, error: null })).requestDebrief(prompt, 'captain')).rejects.toThrow();
+  it('rejects on invoke error, ok:false, empty text and no data', async () => {
+    await expect(mk(jest.fn().mockResolvedValue({ data: null, error: { message: 'bad' } })).requestDebrief(request)).rejects.toThrow('bad');
+    await expect(mk(jest.fn().mockResolvedValue({ data: { ok: false, reason: 'monthly_cap' }, error: null })).requestDebrief(request)).rejects.toThrow();
+    await expect(mk(jest.fn().mockResolvedValue(okRes({ text: '' }))).requestDebrief(request)).rejects.toThrow();
+    await expect(mk(jest.fn().mockResolvedValue({ data: null, error: null })).requestDebrief(request)).rejects.toThrow();
+  });
+  it('transport invokes exactly once on failure', async () => {
+    const invoke = jest.fn().mockResolvedValue({ data: null, error: { message: 'down' } });
+    const coach = createVoiceCoach({ persona: 'captain', transport: mk(invoke) });
+    const d = await coach.debrief({ persona: 'captain', result: ballResult, ovr, badges });
+    expect(d.source).toBe('template');
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+  describe('timeout', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('template on timeout (12 s)', async () => {
+      expect(DEBRIEF_TIMEOUT_MS).toBe(12_000);
+      const invoke = jest.fn(() => new Promise(() => undefined));
+      const coach = createVoiceCoach({ persona: 'captain', transport: mk(invoke as unknown as jest.Mock) });
+      const p = coach.debrief({ persona: 'captain', result: ballResult, ovr, badges });
+      await jest.advanceTimersByTimeAsync(DEBRIEF_TIMEOUT_MS + 1);
+      const d = await p;
+      expect(d.source).toBe('template');
+      expect(d.estimatedCostUsd).toBe(0);
+      expect(invoke).toHaveBeenCalledTimes(1);
+    });
+    it('clears the timer on success', async () => {
+      await mk(jest.fn().mockResolvedValue(okRes())).requestDebrief(request);
+      expect(jest.getTimerCount()).toBe(0);
+    });
   });
 });
 
@@ -195,7 +266,14 @@ describe('voiceCoach', () => {
 
   it('uses the transport and fills cost', async () => {
     const transport: DebriefTransport = {
-      requestDebrief: jest.fn().mockResolvedValue({ text: 'Nice work.', audioUri: 'u', inputTokens: 700, outputTokens: 100 }),
+      requestDebrief: jest
+        .fn()
+        .mockResolvedValue({
+          text: 'Nice work.',
+          audioUri: 'u',
+          inputTokens: 700,
+          outputTokens: 100,
+        }),
     };
     const d = await createVoiceCoach({ persona: 'captain', transport }).debrief(input);
     expect(d.source).toBe('haiku');
@@ -215,13 +293,25 @@ describe('voiceCoach', () => {
   });
 
   it('falls back to the template on transport error, empty text, or unsafe wearables', async () => {
-    const failing: DebriefTransport = { requestDebrief: async () => { throw new Error('down'); } };
-    expect((await createVoiceCoach({ persona: 'captain', transport: failing }).debrief(input)).source).toBe('template');
-    const empty: DebriefTransport = { requestDebrief: async () => ({ text: '', audioUri: null, inputTokens: 0, outputTokens: 0 }) };
-    expect((await createVoiceCoach({ persona: 'captain', transport: empty }).debrief(input)).source).toBe('template');
+    const failing: DebriefTransport = {
+      requestDebrief: async () => {
+        throw new Error('down');
+      },
+    };
+    expect(
+      (await createVoiceCoach({ persona: 'captain', transport: failing }).debrief(input)).source,
+    ).toBe('template');
+    const empty: DebriefTransport = {
+      requestDebrief: async () => ({ text: '', audioUri: null, inputTokens: 0, outputTokens: 0 }),
+    };
+    expect(
+      (await createVoiceCoach({ persona: 'captain', transport: empty }).debrief(input)).source,
+    ).toBe('template');
     const ok: DebriefTransport = { requestDebrief: jest.fn() };
     const bad = { ...input, wearables: [{ source: 'strava' }] } as unknown as typeof input;
-    expect((await createVoiceCoach({ persona: 'captain', transport: ok }).debrief(bad)).source).toBe('template');
+    expect(
+      (await createVoiceCoach({ persona: 'captain', transport: ok }).debrief(bad)).source,
+    ).toBe('template');
     expect(ok.requestDebrief).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,7 @@ export {
   estimateDebriefCostUsd,
   estimateMonthlyVoiceCostUsd,
 } from './costModel';
-export { buildDebriefPrompt, templateDebrief, type DebriefInput } from './debriefPrompt';
-export { createEdgeFunctionTransport, type DebriefTransport } from './transport';
+export { buildDebriefRequest, templateDebrief, type DebriefInput } from './debriefPrompt';
+export { createEdgeFunctionTransport, DEBRIEF_TIMEOUT_MS, type DebriefTransport } from './transport';
 export { createQaBudget, type QaBudget } from './qaBudget';
 export { createVoiceCoach, type VoiceCoach } from './voiceCoach';
