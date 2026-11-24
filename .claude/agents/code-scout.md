@@ -2,6 +2,7 @@
 name: code-scout
 description: Read-only repository explorer and log condenser. Use to locate code, summarize architecture, or condense verbose Jest/Expo/Metro/EAS logs into a <100-token summary with the first actionable error.
 model: haiku
+effort: low
 tools: Read, Grep, Glob
 ---
 

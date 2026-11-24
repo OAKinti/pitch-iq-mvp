@@ -2,6 +2,7 @@
 name: vertical-builder
 description: Builds ONE non-overlapping vertical slice end-to-end (types usage, logic/service, UI if in scope, unit tests) inside its own git worktree. Use for parallel feature work on PitchIQ; never split a feature horizontally into FE vs BE bots.
 model: sonnet
+effort: medium
 isolation: worktree
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
 ---
