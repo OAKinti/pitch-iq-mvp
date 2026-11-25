@@ -1,9 +1,35 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ConsentRecord, DrillResult, GroupMemberStat, OvrResult } from '../../types/contracts';
+import type {
+  AgeBracket,
+  CoachPersona,
+  ConsentRecord,
+  DrillResult,
+  GroupMemberStat,
+  OvrResult,
+  PlayerPosition,
+} from '../../types/contracts';
 import type { AppConfig } from '../config';
 import { getSupabaseClient } from './client';
 
+export interface ProfileInput {
+  displayName: string;
+  ageBracket: AgeBracket;
+  position: PlayerPosition | null;
+  persona: CoachPersona;
+}
+
+export type SyncStatus = 'ok' | 'offline' | 'error';
+
+/** Parental verification is server-only (service_role); the client may never record it. */
+function assertClientConsent(consent: ConsentRecord): void {
+  if (consent.type === 'parental_verified') {
+    throw new Error('recordConsent refused: parental_verified can only be set by the server');
+  }
+}
+
 export interface PitchIqRepository {
+  /** Upsert on id; age_bracket is only written on first insert (the server ignores later changes). */
+  saveProfile(userId: string, profile: ProfileInput): Promise<void>;
   saveDrillResult(userId: string, result: DrillResult, ovr: OvrResult): Promise<void>;
   recordConsent(userId: string, consent: ConsentRecord): Promise<void>;
   listGroupMembers(groupId: string): Promise<GroupMemberStat[]>;
@@ -60,6 +86,10 @@ export class DemoRepository implements PitchIqRepository {
     return this.members.map((m) => ({ ...m, activeDays: [...m.activeDays] }));
   }
 
+  async saveProfile(_userId: string, _profile: ProfileInput): Promise<void> {
+    // Demo mode: the profile lives in app state and local storage only.
+  }
+
   async saveDrillResult(_userId: string, _result: DrillResult, ovr: OvrResult): Promise<void> {
     const day = isoDay(this.clock());
     this.members = this.members.map((m) =>
@@ -74,7 +104,8 @@ export class DemoRepository implements PitchIqRepository {
     for (const l of this.listeners) if (l.groupId === DEMO_GROUP_ID) l.cb(this.snapshot());
   }
 
-  async recordConsent(_userId: string, _consent: ConsentRecord): Promise<void> {
+  async recordConsent(_userId: string, consent: ConsentRecord): Promise<void> {
+    assertClientConsent(consent);
     // Demo mode: consents live in app state only.
   }
 
@@ -104,7 +135,39 @@ interface ResultRow {
 export class SupabaseRepository implements PitchIqRepository {
   constructor(private readonly client: SupabaseClient) {}
 
+  /** AUTH-2: writes are owned by auth.uid(); the demo placeholder id must never reach the server. */
+  private assertRealUser(userId: string): void {
+    if (userId === DEMO_USER_ID) throw new Error('refusing to write with the demo user id');
+  }
+
+  async saveProfile(userId: string, profile: ProfileInput): Promise<void> {
+    this.assertRealUser(userId);
+    const inserted = await this.client.from('profiles').insert({
+      id: userId,
+      display_name: profile.displayName,
+      age_bracket: profile.ageBracket,
+      position: profile.position,
+      persona: profile.persona,
+    });
+    if (!inserted.error) return;
+    if (inserted.error.code !== '23505') {
+      throw new Error(`saveProfile failed: ${inserted.error.message}`);
+    }
+    // Row exists: update only the user-editable columns (age_bracket is column-revoked, migration 004).
+    const updated = await this.client
+      .from('profiles')
+      .update({
+        display_name: profile.displayName,
+        position: profile.position,
+        persona: profile.persona,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+    if (updated.error) throw new Error(`saveProfile failed: ${updated.error.message}`);
+  }
+
   async saveDrillResult(userId: string, result: DrillResult, ovr: OvrResult): Promise<void> {
+    this.assertRealUser(userId);
     const { error } = await this.client.from('drill_sessions').insert({
       user_id: userId,
       sport: result.sport,
@@ -117,13 +180,16 @@ export class SupabaseRepository implements PitchIqRepository {
   }
 
   async recordConsent(userId: string, consent: ConsentRecord): Promise<void> {
+    assertClientConsent(consent);
+    this.assertRealUser(userId);
     const { error } = await this.client.from('consents').insert({
       user_id: userId,
       consent_type: consent.type,
       policy_version: consent.policyVersion,
       granted_at: consent.grantedAt,
     });
-    if (error) throw new Error(`recordConsent failed: ${error.message}`);
+    // 23505: this (user, type, policy_version) is already recorded; insert-only, so that is success.
+    if (error && error.code !== '23505') throw new Error(`recordConsent failed: ${error.message}`);
   }
 
   async listGroupMembers(groupId: string): Promise<GroupMemberStat[]> {

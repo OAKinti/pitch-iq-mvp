@@ -288,3 +288,115 @@ describe('createRepository / getSupabaseClient', () => {
     ).toBeInstanceOf(SupabaseRepository);
   });
 });
+
+describe('SupabaseRepository identity and profile writes (S2)', () => {
+  type Err = { message: string; code?: string } | null;
+  type Call = { table: string; op: string; arg?: unknown; eq?: unknown };
+  function recordingClient(errors: { insert?: Err; update?: Err } = {}) {
+    const calls: Call[] = [];
+    const client = {
+      from: (table: string) => ({
+        insert: (row: unknown) => {
+          calls.push({ table, op: 'insert', arg: row });
+          return Promise.resolve({ data: null, error: errors.insert ?? null });
+        },
+        update: (row: unknown) => {
+          const call: Call = { table, op: 'update', arg: row };
+          calls.push(call);
+          return {
+            eq: (col: string, val: unknown) => {
+              call.eq = [col, val];
+              return Promise.resolve({ data: null, error: errors.update ?? null });
+            },
+          };
+        },
+      }),
+    } as unknown as SupabaseClient;
+    return { client, calls };
+  }
+  const profile = {
+    displayName: 'Player',
+    ageBracket: 'teen_13_17',
+    position: 'MID',
+    persona: 'captain',
+  } as const;
+  const consent = { type: 'camera_skeletal_tracking', policyVersion: 'v', grantedAt: 't' } as const;
+
+  it('AUTH-2: demo user id is never sent to Supabase', async () => {
+    const f = recordingClient();
+    const repo = new SupabaseRepository(f.client);
+    await expect(repo.saveProfile(DEMO_USER_ID, profile)).rejects.toThrow('demo user id');
+    await expect(repo.saveDrillResult(DEMO_USER_ID, ballResult, ovr)).rejects.toThrow(
+      'demo user id',
+    );
+    await expect(repo.recordConsent(DEMO_USER_ID, consent)).rejects.toThrow('demo user id');
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('AUTH-2: writes carry the session user id', async () => {
+    const f = recordingClient();
+    const repo = new SupabaseRepository(f.client);
+    await repo.saveProfile('uid-1', profile);
+    await repo.saveDrillResult('uid-1', ballResult, ovr);
+    await repo.recordConsent('uid-1', consent);
+    expect(f.calls[0]).toMatchObject({
+      table: 'profiles',
+      op: 'insert',
+      arg: { id: 'uid-1', age_bracket: 'teen_13_17', persona: 'captain', position: 'MID' },
+    });
+    expect(f.calls[1]?.arg).toMatchObject({ user_id: 'uid-1' });
+    expect(f.calls[2]?.arg).toMatchObject({ user_id: 'uid-1' });
+  });
+
+  it('saveProfile on an existing row updates editable columns only (never age_bracket)', async () => {
+    const f = recordingClient({ insert: { message: 'dup', code: '23505' } });
+    await new SupabaseRepository(f.client).saveProfile('uid-1', { ...profile, persona: 'hype' });
+    const update = f.calls.find((c) => c.op === 'update');
+    expect(update?.eq).toEqual(['id', 'uid-1']);
+    expect(Object.keys(update?.arg as object).sort()).toEqual([
+      'display_name',
+      'persona',
+      'position',
+      'updated_at',
+    ]);
+    expect(update?.arg).toMatchObject({ persona: 'hype' });
+  });
+
+  it('saveProfile surfaces insert and update failures', async () => {
+    await expect(
+      new SupabaseRepository(recordingClient({ insert: { message: 'rls' } }).client).saveProfile(
+        'u',
+        profile,
+      ),
+    ).rejects.toThrow('saveProfile failed: rls');
+    await expect(
+      new SupabaseRepository(
+        recordingClient({
+          insert: { message: 'dup', code: '23505' },
+          update: { message: 'denied' },
+        }).client,
+      ).saveProfile('u', profile),
+    ).rejects.toThrow('saveProfile failed: denied');
+  });
+
+  it('recordConsent treats an already-recorded consent (unique violation) as success', async () => {
+    const f = recordingClient({ insert: { message: 'dup', code: '23505' } });
+    await expect(
+      new SupabaseRepository(f.client).recordConsent('uid-1', consent),
+    ).resolves.toBeUndefined();
+  });
+
+  it('AUTH-5: parental_verified is refused client-side without calling the server', async () => {
+    const f = recordingClient();
+    const pv = { type: 'parental_verified', policyVersion: 'v', grantedAt: 't' } as const;
+    await expect(new SupabaseRepository(f.client).recordConsent('uid-1', pv)).rejects.toThrow(
+      'parental_verified',
+    );
+    await expect(new DemoRepository().recordConsent('u', pv)).rejects.toThrow('parental_verified');
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('DemoRepository.saveProfile resolves', async () => {
+    await expect(new DemoRepository().saveProfile('u', profile)).resolves.toBeUndefined();
+  });
+});

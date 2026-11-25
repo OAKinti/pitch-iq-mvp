@@ -31,7 +31,7 @@ import {
   requiresParentalConsent,
 } from '../domain';
 import {
-  DEMO_USER_ID,
+  createAuthService,
   createEdgeFunctionTransport,
   createCuePlayer,
   createRepository,
@@ -40,10 +40,15 @@ import {
   getAppConfig,
   getSupabaseClient,
   type AppConfig,
+  type AuthService,
   type CuePlayer,
   type PitchIqRepository,
+  type SyncStatus,
   type VoiceCoach,
 } from '../services';
+import { createLocalProfileStore, type LocalProfileStore } from '../services/persist/localProfile';
+
+const DEFAULT_DISPLAY_NAME = 'Player';
 
 export interface AppState {
   ageBracket: AgeBracket | null;
@@ -65,6 +70,14 @@ export interface AppState {
   /** Increments each time the app leaves the foreground (REC-2). */
   backgroundTick: number;
   now: () => Date;
+  /** Result of the last server write: 'offline' (no session yet), 'error' (write rejected) or 'ok'. */
+  syncStatus: SyncStatus;
+  /** Auth user id once a session exists (Demo Mode: DEMO_USER_ID); null while offline. */
+  userId: string | null;
+  /** True once the persisted local profile has been read. */
+  hydrated: boolean;
+  /** True when the age bracket was persisted by an earlier run: the age gate cannot be retried. */
+  ageLocked: boolean;
   hasConsent: (type: ConsentType) => boolean;
   setAge: (bracket: AgeBracket) => void;
   grantConsent: (type: ConsentType) => void;
@@ -82,6 +95,8 @@ export interface AppStateProviderProps {
   cuePlayer?: CuePlayer;
   now?: () => Date;
   config?: AppConfig;
+  auth?: AuthService;
+  localProfile?: LocalProfileStore;
   /** Test seeding only. */
   initial?: {
     ageBracket?: AgeBracket;
@@ -98,6 +113,8 @@ export function AppStateProvider({
   cuePlayer: cuePlayerOverride,
   now: nowOverride,
   config: configOverride,
+  auth: authOverride,
+  localProfile: localProfileOverride,
   initial,
 }: AppStateProviderProps) {
   const config = useMemo(() => configOverride ?? getAppConfig(), [configOverride]);
@@ -106,6 +123,14 @@ export function AppStateProvider({
     [repositoryOverride, config],
   );
   const now = useMemo(() => nowOverride ?? (() => new Date()), [nowOverride]);
+  const auth = useMemo(
+    () => authOverride ?? createAuthService(getSupabaseClient(config)),
+    [authOverride, config],
+  );
+  const localProfile = useMemo(
+    () => localProfileOverride ?? createLocalProfileStore(),
+    [localProfileOverride],
+  );
 
   const [ageBracket, setAgeBracket] = useState<AgeBracket | null>(initial?.ageBracket ?? null);
   const [persona, setPersonaState] = useState<CoachPersona>(initial?.persona ?? 'captain');
@@ -116,15 +141,24 @@ export function AppStateProvider({
   const [badges, setBadges] = useState<Badge[]>([]);
   const [archetypes, setArchetypes] = useState<ArchetypeMatch[]>([]);
   const [debrief, setDebrief] = useState<Debrief | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('ok');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [ageLocked, setAgeLocked] = useState(false);
+  const debriefToken = useRef(0);
+  const retrySession = useRef<() => void>(() => undefined);
 
   const voiceCoach = useMemo(() => {
     if (voiceCoachOverride) return voiceCoachOverride;
     const client = getSupabaseClient(config);
+    // COPPA-1 / D-9C: an under-13 player is never sent to Tier 2 until a parent is verified. Verification
+    // is server-side only (service_role), so on the client every under-13 profile is unverified.
+    const tier2Allowed = !(ageBracket && requiresParentalConsent(ageBracket));
     return createVoiceCoach({
       persona,
-      transport: client ? createEdgeFunctionTransport(client) : null,
+      transport: client && tier2Allowed ? createEdgeFunctionTransport(client) : null,
     });
-  }, [voiceCoachOverride, persona, config]);
+  }, [voiceCoachOverride, persona, config, ageBracket]);
 
   const cuePlayer = useMemo(
     () => cuePlayerOverride ?? createCuePlayer({ sources: CUE_AUDIO_SOURCES }),
@@ -146,6 +180,8 @@ export function AppStateProvider({
   useEffect(() => {
     const sub = RNAppState.addEventListener('change', (status) => {
       if (status === 'active') {
+        // Offline at launch: retry the anonymous session each time the app returns to the foreground.
+        retrySession.current();
         cuePlayer.reassertAudioMode().catch(() => undefined);
       } else if (status === 'background') {
         // REC-2: only a real background resets the drill. iOS 'inactive' (permission prompt,
@@ -157,8 +193,8 @@ export function AppStateProvider({
     return () => sub?.remove();
   }, [cuePlayer]);
 
-  const live = useRef({ results, position, voiceCoach, persona });
-  live.current = { results, position, voiceCoach, persona };
+  const live = useRef({ results, position, voiceCoach, persona, consents, ageLocked });
+  live.current = { results, position, voiceCoach, persona, consents, ageLocked };
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -167,7 +203,136 @@ export function AppStateProvider({
     };
   }, []);
 
-  const setAge = useCallback((bracket: AgeBracket) => setAgeBracket(bracket), []);
+  // ---- Server writes: wait for a session, then run serially (profile row before its consents).
+  type Job = (uid: string) => Promise<void>;
+  const uidRef = useRef<string | null>(null);
+  const pending = useRef(new Map<string, Job>());
+  const chain = useRef<Promise<void>>(Promise.resolve());
+
+  const runJob = useCallback((job: Job) => {
+    const uid = uidRef.current;
+    if (!uid) return;
+    chain.current = chain.current
+      .then(() => job(uid))
+      .then(
+        () => {
+          if (mounted.current) setSyncStatus('ok');
+        },
+        () => {
+          // Never log the error: it may echo user data.
+          if (mounted.current) setSyncStatus('error');
+        },
+      );
+  }, []);
+
+  const enqueue = useCallback(
+    (key: string, job: Job) => {
+      if (!uidRef.current) {
+        pending.current.set(key, job); // same key (profile) keeps its slot and the latest value
+        setSyncStatus('offline');
+        return;
+      }
+      runJob(job);
+    },
+    [runJob],
+  );
+
+  const flush = useCallback(() => {
+    const jobs = [...pending.current.values()];
+    pending.current.clear();
+    jobs.forEach(runJob);
+  }, [runJob]);
+
+  const acquireSession = useCallback(async () => {
+    const session = await auth.ensureSession();
+    if (!mounted.current) return;
+    if (!session) {
+      setSyncStatus('offline');
+      return;
+    }
+    uidRef.current = session.userId;
+    setUserId(session.userId);
+    flush();
+  }, [auth, flush]);
+
+  useEffect(() => {
+    void acquireSession();
+  }, [acquireSession]);
+
+  retrySession.current = () => {
+    if (!uidRef.current) void acquireSession();
+  };
+
+  // Read the persisted local profile once at startup (test `initial` seeds win).
+  useEffect(() => {
+    let cancelled = false;
+    localProfile
+      .load()
+      .then((lp) => {
+        if (cancelled) return;
+        if (!initial?.ageBracket && lp.ageBracket) {
+          setAgeBracket(lp.ageBracket);
+          setAgeLocked(true);
+          live.current.ageLocked = true;
+        }
+        if (!initial?.consents && lp.consents.length > 0) {
+          live.current.consents = lp.consents;
+          setConsents(lp.consents);
+          // Re-sync consents a previous offline run could not deliver (unique key makes this idempotent).
+          lp.consents.forEach((c) => {
+            if (c.type !== 'parental_verified') {
+              enqueue(`consent:${c.type}`, (uid) => repository.recordConsent(uid, c));
+            }
+          });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // startup only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Profile row: created once the age is known, then kept in step with persona/position. The newest
+  // profile wins per key, and an unchanged profile is not re-sent.
+  const lastProfileKey = useRef<string | null>(null);
+  const syncProfile = useCallback(
+    (bracket: AgeBracket, pos: PlayerPosition, coach: CoachPersona) => {
+      const key = [bracket, pos, coach, uidRef.current ?? ''].join('|');
+      if (lastProfileKey.current === key) return;
+      lastProfileKey.current = key;
+      enqueue('profile', (uid) =>
+        repository.saveProfile(uid, {
+          displayName: DEFAULT_DISPLAY_NAME,
+          ageBracket: bracket,
+          position: pos,
+          persona: coach,
+        }),
+      );
+    },
+    [repository, enqueue],
+  );
+
+  useEffect(() => {
+    if (ageBracket) syncProfile(ageBracket, position, persona);
+  }, [ageBracket, position, persona, userId, syncProfile]);
+
+  const setAge = useCallback(
+    (bracket: AgeBracket) => {
+      // AUTH-4: a persisted bracket cannot be changed by retrying the gate.
+      if (live.current.ageLocked) return;
+      setAgeBracket(bracket);
+      void localProfile.save({ ageBracket: bracket });
+      // Enqueue now so the profile row always precedes consents granted in the same tick.
+      syncProfile(bracket, live.current.position, live.current.persona);
+    },
+    [localProfile, syncProfile],
+  );
+
   const setPersona = useCallback((p: CoachPersona) => setPersonaState(p), []);
   const setPosition = useCallback((p: PlayerPosition) => setPositionState(p), []);
 
@@ -178,14 +343,21 @@ export function AppStateProvider({
         policyVersion: CONSENT_POLICY_VERSION,
         grantedAt: now().toISOString(),
       };
-      setConsents((prev) => [...prev.filter((c) => c.type !== type), record]);
-      repository.recordConsent(DEMO_USER_ID, record).catch(() => undefined);
+      const next = [...live.current.consents.filter((c) => c.type !== type), record];
+      live.current.consents = next;
+      setConsents(next);
+      void localProfile.save({ consents: next, onboardedAt: record.grantedAt });
+      if (type !== 'parental_verified') {
+        enqueue(`consent:${type}`, (uid) => repository.recordConsent(uid, record));
+      }
     },
-    [repository, now],
+    [repository, now, localProfile, enqueue],
   );
 
   const completeDrill = useCallback(
     (result: DrillResult) => {
+      // RACE-2: one save per drill result id (double-tapping "view results" must not duplicate).
+      if (live.current.results.some((r) => r.id === result.id)) return;
       const all = [...live.current.results, result];
       const metrics = all.map((r) => r.metrics);
       const attributes = deriveAttributes(metrics);
@@ -198,7 +370,8 @@ export function AppStateProvider({
       setBadges(nextBadges);
       setArchetypes(nextArchetypes);
       setDebrief(null);
-      repository.saveDrillResult(DEMO_USER_ID, result, nextOvr).catch(() => undefined);
+      enqueue(`drill:${result.id}`, (uid) => repository.saveDrillResult(uid, result, nextOvr));
+      const token = ++debriefToken.current;
       const topArchetype = nextArchetypes[0];
       live.current.voiceCoach
         .debrief({
@@ -209,11 +382,12 @@ export function AppStateProvider({
           ...(topArchetype ? { topArchetype } : {}),
         })
         .then((d) => {
-          if (mounted.current) setDebrief(d);
+          // RACE-1: a slower, older debrief must not overwrite the newest drill's debrief.
+          if (mounted.current && token === debriefToken.current) setDebrief(d);
         })
         .catch(() => undefined);
     },
-    [repository],
+    [repository, enqueue],
   );
 
   const value = useMemo<AppState>(
@@ -235,6 +409,10 @@ export function AppStateProvider({
       cuePlayer,
       backgroundTick,
       now,
+      syncStatus,
+      userId,
+      hydrated,
+      ageLocked,
       hasConsent: (type) => consents.some((c) => c.type === type),
       setAge,
       grantConsent,
@@ -258,6 +436,10 @@ export function AppStateProvider({
       cuePlayer,
       backgroundTick,
       now,
+      syncStatus,
+      userId,
+      hydrated,
+      ageLocked,
       setAge,
       grantConsent,
       setPersona,
