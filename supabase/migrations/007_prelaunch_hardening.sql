@@ -92,6 +92,8 @@ begin
       new.granted_at := old.granted_at;
       if old.revoked_at is not null then
         new.revoked_at := old.revoked_at;
+      elsif new.revoked_at is not null then
+        new.revoked_at := now(); -- the server stamps the revocation time, not the client
       end if;
     end if;
   end if;
