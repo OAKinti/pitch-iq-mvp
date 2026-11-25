@@ -1,4 +1,4 @@
-# Squad invite: a join link received after onboarding routes to the Group screen with a result notice,
+# Squad invite: a join link received after onboarding routes to the Group screen, asks for confirmation, then shows a result notice,
 # then the member creates an invite of their own (opens the OS share sheet).
 appId: com.pitchiq.mvp
 name: PitchIQ squad invite
@@ -31,6 +31,10 @@ name: PitchIQ squad invite
 - openLink: pitchiq://join/DEMSQUAD23
 - assertVisible:
     id: screen-group
+- assertVisible:
+    id: group-join-confirm
+- tapOn:
+    id: group-join-accept
 - assertVisible:
     id: group-join-notice
 - tapOn:

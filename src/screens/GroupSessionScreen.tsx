@@ -22,7 +22,19 @@ function activeDaysInWindow(member: GroupMemberStat, now: Date): number {
 }
 
 export function GroupSessionScreen() {
-  const { repository, now, groupId, requiresParent, joinNotice, userId } = useAppState();
+  const {
+    repository,
+    now,
+    groupId,
+    requiresParent,
+    joinNotice,
+    userId,
+    pendingInvite,
+    acceptPendingInvite,
+    declinePendingInvite,
+    hasConsent,
+  } = useAppState();
+  const parentLocked = requiresParent && !hasConsent('parental_verified');
   // The signed-in user (anonymous auth, D-9A); Demo Mode resolves to the demo id.
   const meId = userId ?? DEMO_USER_ID;
   const [members, setMembers] = useState<GroupMemberStat[]>([]);
@@ -72,6 +84,28 @@ export function GroupSessionScreen() {
   return (
     <ScreenFrame testID="screen-group" kicker="Group session" title="Sunday league">
       <NavBackButton />
+      {pendingInvite ? (
+        <HudPanel testID="group-join-confirm" accent title="Squad invite">
+          <Text style={styles.crownName}>
+            {parentLocked
+              ? 'A parent needs to verify your account before you can join a squad.'
+              : 'Join this squad? Squad members will see your display name and scores.'}
+          </Text>
+          {parentLocked ? null : (
+            <HudButton
+              testID="group-join-accept"
+              label="Join squad"
+              onPress={acceptPendingInvite}
+            />
+          )}
+          <HudButton
+            testID="group-join-decline"
+            label={parentLocked ? 'Dismiss' : 'Not now'}
+            variant="secondary"
+            onPress={declinePendingInvite}
+          />
+        </HudPanel>
+      ) : null}
       {joinNotice ? (
         <HudPanel accent={joinNotice.ok} title="Squad invite">
           <Text testID="group-join-notice" style={styles.crownName}>

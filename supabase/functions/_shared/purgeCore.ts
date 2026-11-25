@@ -77,3 +77,67 @@ export async function purgeExpiredRawVideos(deps: PurgeDeps): Promise<PurgeResul
 
   return { ok: true, storageObjectsRemoved, rowsCleared, pages };
 }
+
+// ── Phase 2 (B-6): object-age sweep ──
+// Row-based purging misses objects no drill_sessions row points at (direct uploads, deleted rows,
+// overwritten paths). Every object in a swept bucket has a hard maximum age (raw-video 90 days,
+// debrief-audio 30 days, enforced by public.list_stale_storage_objects), so delete by age, then
+// clear any raw_video_path still pointing at a deleted raw-video object.
+
+export const SWEPT_BUCKETS = ['raw-video', 'debrief-audio'] as const;
+export type SweptBucket = (typeof SWEPT_BUCKETS)[number];
+
+export interface SweepDeps {
+  /** Up to `limit` object names in `bucket` older than the bucket's maximum age, oldest first. */
+  listStaleObjects(bucket: SweptBucket, limit: number): Promise<string[]>;
+  /** Remove objects from `bucket`; rejects on a storage error. */
+  removeFromBucket(bucket: SweptBucket, names: readonly string[]): Promise<void>;
+  /** Null raw_video_path on rows pointing at these (now deleted) raw-video objects. */
+  clearPathsByName(names: readonly string[]): Promise<number>;
+}
+
+export type SweepResult =
+  | { readonly ok: true; readonly removed: Readonly<Record<SweptBucket, number>>; readonly rowsCleared: number }
+  | {
+      readonly ok: false;
+      readonly stage: 'list' | 'remove' | 'clear';
+      readonly bucket: SweptBucket;
+      readonly removed: Readonly<Record<SweptBucket, number>>;
+      readonly rowsCleared: number;
+    };
+
+export async function sweepStaleObjects(deps: SweepDeps): Promise<SweepResult> {
+  const removed: Record<SweptBucket, number> = { 'raw-video': 0, 'debrief-audio': 0 };
+  let rowsCleared = 0;
+
+  for (const bucket of SWEPT_BUCKETS) {
+    for (let page = 0; page < PURGE_MAX_PAGES; page++) {
+      let names: string[];
+      try {
+        names = await deps.listStaleObjects(bucket, PURGE_PAGE_SIZE);
+      } catch {
+        return { ok: false, stage: 'list', bucket, removed, rowsCleared };
+      }
+      if (names.length === 0) break;
+
+      for (let i = 0; i < names.length; i += STORAGE_REMOVE_BATCH) {
+        const batch = names.slice(i, i + STORAGE_REMOVE_BATCH);
+        try {
+          await deps.removeFromBucket(bucket, batch);
+        } catch {
+          return { ok: false, stage: 'remove', bucket, removed, rowsCleared };
+        }
+        removed[bucket] += batch.length;
+        if (bucket === 'raw-video') {
+          try {
+            rowsCleared += await deps.clearPathsByName(batch);
+          } catch {
+            return { ok: false, stage: 'clear', bucket, removed, rowsCleared };
+          }
+        }
+      }
+      if (names.length < PURGE_PAGE_SIZE) break;
+    }
+  }
+  return { ok: true, removed, rowsCleared };
+}

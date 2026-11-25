@@ -88,13 +88,17 @@ export interface AppState {
   hydrated: boolean;
   /** True when the age bracket was persisted by an earlier run: the age gate cannot be retried. */
   ageLocked: boolean;
-  /** Invite code received before onboarding finished; joined automatically afterwards. */
+  /** Invite code received from a link; held until the user accepts or declines (never auto-joined). */
   pendingInvite: string | null;
   joinNotice: JoinNotice | null;
   /** The squad shown on the Group screen (the demo squad until an invite joins another). */
   groupId: string;
   /** Accepts a validated invite code: joins now, or after onboarding + session. */
   joinFromInvite: (code: string) => void;
+  /** Joins the held invite (serial queue, after profile + session). */
+  acceptPendingInvite: () => void;
+  /** Drops the held invite without any server call. */
+  declinePendingInvite: () => void;
   hasConsent: (type: ConsentType) => boolean;
   setAge: (bracket: AgeBracket) => void;
   grantConsent: (type: ConsentType) => void;
@@ -362,12 +366,25 @@ export function AppStateProvider({
   // serial queue, so it runs after the profile row and a session exist.
   const onboarded =
     ageBracket !== null && consents.some((c) => c.type === 'camera_skeletal_tracking');
+  const onboardedRef = useRef(onboarded);
+  onboardedRef.current = onboarded;
 
-  const joinFromInvite = useCallback((code: string) => setPendingInvite(code), []);
+  // A received link is only held: joining needs an explicit accept (the user sees who they join).
+  const pendingRef = useRef<string | null>(null);
+  const joinFromInvite = useCallback((code: string) => {
+    pendingRef.current = code;
+    setPendingInvite(code);
+  }, []);
 
-  useEffect(() => {
-    if (!pendingInvite || !onboarded) return;
-    const code = pendingInvite;
+  const declinePendingInvite = useCallback(() => {
+    pendingRef.current = null;
+    setPendingInvite(null);
+  }, []);
+
+  const acceptPendingInvite = useCallback(() => {
+    const code = pendingRef.current;
+    if (!code || !onboardedRef.current) return;
+    pendingRef.current = null;
     setPendingInvite(null);
     enqueue('invite-join', async () => {
       let notice: JoinNotice;
@@ -382,7 +399,7 @@ export function AppStateProvider({
       }
       if (mounted.current) setJoinNotice(notice);
     });
-  }, [pendingInvite, onboarded, enqueue, repository]);
+  }, [enqueue, repository]);
 
   const setPersona = useCallback((p: CoachPersona) => setPersonaState(p), []);
   const setPosition = useCallback((p: PlayerPosition) => setPositionState(p), []);
@@ -468,6 +485,8 @@ export function AppStateProvider({
       joinNotice,
       groupId,
       joinFromInvite,
+      acceptPendingInvite,
+      declinePendingInvite,
       hasConsent: (type) => consents.some((c) => c.type === type),
       setAge,
       grantConsent,
@@ -499,6 +518,8 @@ export function AppStateProvider({
       joinNotice,
       groupId,
       joinFromInvite,
+      acceptPendingInvite,
+      declinePendingInvite,
       setAge,
       grantConsent,
       setPersona,

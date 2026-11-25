@@ -37,6 +37,7 @@ function mkDeps(
 ): DebriefDeps {
   return {
     tier2Status: async () => 'ok',
+    reserveGlobal: async () => true,
     reserveChars: async () => MONTH,
     refundChars: async () => undefined,
     complete: async () => complete,

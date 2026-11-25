@@ -4,7 +4,11 @@
 // The paging + "clear a pointer only after its object is deleted" logic lives in
 // ../_shared/purgeCore.ts (jest-tested). This file only wires Supabase into it.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { purgeExpiredRawVideos, type ExpiredVideoRow } from '../_shared/purgeCore.ts';
+import {
+  purgeExpiredRawVideos,
+  sweepStaleObjects,
+  type ExpiredVideoRow,
+} from '../_shared/purgeCore.ts';
 
 Deno.serve(async (req: Request) => {
   // Only the scheduler, holding the purge-only token, may trigger a purge.
@@ -55,7 +59,42 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+
+  // Phase 2 (B-6): delete objects past their bucket's maximum age even when no row points at them.
+  const sweep = await sweepStaleObjects({
+    async listStaleObjects(bucket, limit) {
+      const { data, error } = await service.rpc('list_stale_storage_objects', {
+        p_bucket: bucket,
+        p_limit: limit,
+      });
+      if (error) throw new Error('list stale failed');
+      return ((data ?? []) as unknown[])
+        .map((r) =>
+          typeof r === 'string'
+            ? r
+            : String((r as Record<string, unknown>).list_stale_storage_objects ?? ''),
+        )
+        .filter((n) => n.length > 0);
+    },
+    async removeFromBucket(bucket, names) {
+      const { error } = await service.storage.from(bucket).remove([...names]);
+      if (error) throw new Error('remove failed');
+    },
+    async clearPathsByName(names) {
+      const { data, error } = await service
+        .from('drill_sessions')
+        .update({ raw_video_path: null })
+        .in('raw_video_path', [...names])
+        .select('id');
+      if (error) throw new Error('clear failed');
+      return data?.length ?? 0;
+    },
+  });
+  const body = { ...result, sweep };
+  return new Response(JSON.stringify(body), {
+    status: sweep.ok ? 200 : 500,
+    headers: { 'Content-Type': 'application/json' },
+  });
 });
 
 /** Constant-time string compare so the service-key check does not leak a prefix via timing. */

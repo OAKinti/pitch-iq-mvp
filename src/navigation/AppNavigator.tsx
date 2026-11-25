@@ -40,7 +40,8 @@ export function AppNavigator({ initialRoute = 'Onboarding' }: { initialRoute?: R
     return () => sub.remove();
   }, [canGoBack, goBack]);
 
-  const { joinFromInvite, joinNotice } = useAppState();
+  const { joinFromInvite, joinNotice, pendingInvite, ageBracket, hasConsent } = useAppState();
+  const onboarded = ageBracket !== null && hasConsent('camera_skeletal_tracking');
 
   // D-9B: a pitchiq://join/<code> link (cold start or while running). One join per received URL.
   useEffect(() => {
@@ -54,6 +55,12 @@ export function AppNavigator({ initialRoute = 'Onboarding' }: { initialRoute?: R
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
     return () => sub.remove();
   }, [joinFromInvite]);
+
+  // Show the confirm card (Group screen) once a link is held and onboarding is done.
+  useEffect(() => {
+    if (!pendingInvite || !onboarded) return;
+    setStack((s) => (s[s.length - 1] === 'GroupSession' ? s : [...s, 'GroupSession']));
+  }, [pendingInvite, onboarded]);
 
   // Show the Group screen whenever a join attempt resolves.
   const noticeSeq = joinNotice?.seq ?? 0;

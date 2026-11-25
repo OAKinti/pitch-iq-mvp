@@ -44,7 +44,7 @@ beforeEach(async () => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('squad invite links', () => {
-  it('INV-2 a link opened before onboarding is held, then joined once onboarded', async () => {
+  it('INV-2 a link opened before onboarding is held, confirmed, then joined exactly once', async () => {
     const repo = new DemoRepository();
     const spy = jest.spyOn(repo, 'joinGroupByInvite');
     initialUrl = JOIN_URL;
@@ -57,25 +57,79 @@ describe('squad invite links', () => {
     );
     await flush();
     expect(app.pendingInvite).toBe(DEMO_INVITE_CODE);
-    expect(spy).not.toHaveBeenCalled();
     expect(screen.getByTestId('screen-onboarding')).toBeTruthy();
     await act(async () => app.setAge('adult_18_plus'));
     await act(async () => app.grantConsent('camera_skeletal_tracking'));
     await flush();
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('screen-group')).toBeTruthy();
+    expect(screen.getByTestId('group-join-confirm')).toHaveTextContent(/Join this squad\?/);
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
+    await flush();
     expect(spy).toHaveBeenCalledTimes(1);
     expect(app.pendingInvite).toBeNull();
-    expect(screen.getByTestId('screen-group')).toBeTruthy();
+    expect(screen.queryByTestId('group-join-confirm')).toBeNull();
     expect(screen.getByTestId('group-join-notice')).toHaveTextContent('You joined the squad.');
   });
 
-  it('INV-2 a link while running routes to the Group screen after joining', async () => {
+  it('INV-2 a link while running shows the confirm card and joins only on accept', async () => {
     const repo = new DemoRepository();
     const spy = jest.spyOn(repo, 'joinGroupByInvite');
     await renderNavigator({ initialRoute: 'Combine', initial: adult, repository: repo });
     await emit(JOIN_URL);
     await flush();
-    expect(spy).toHaveBeenCalledWith(DEMO_INVITE_CODE);
+    expect(spy).not.toHaveBeenCalled();
     expect(screen.getByTestId('screen-group')).toBeTruthy();
+    expect(screen.getByTestId('group-join-confirm')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
+    await flush();
+    expect(spy).toHaveBeenCalledWith(DEMO_INVITE_CODE);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('screen-group')).toBeTruthy();
+  });
+
+  it('INV-2 decline clears the invite with no repository call', async () => {
+    const repo = new DemoRepository();
+    const spy = jest.spyOn(repo, 'joinGroupByInvite');
+    await renderNavigator({ initialRoute: 'Combine', initial: adult, repository: repo });
+    await emit(JOIN_URL);
+    await flush();
+    await fireEvent.press(screen.getByTestId('group-join-decline'));
+    await flush();
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('group-join-confirm')).toBeNull();
+    expect(screen.queryByTestId('group-join-notice')).toBeNull();
+  });
+
+  it('INV-2 a newer link replaces an older pending one', async () => {
+    const repo = new DemoRepository();
+    const spy = jest.spyOn(repo, 'joinGroupByInvite');
+    await renderNavigator({ initialRoute: 'Combine', initial: adult, repository: repo });
+    await emit('pitchiq://join/ZZZZZZZZZZ');
+    await emit(JOIN_URL);
+    await flush();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(DEMO_INVITE_CODE);
+  });
+
+  it('INV-2 under-13 sees the parent notice and no accept button', async () => {
+    const repo = new DemoRepository();
+    const spy = jest.spyOn(repo, 'joinGroupByInvite');
+    await renderNavigator({
+      initialRoute: 'Combine',
+      initial: { ageBracket: 'under_13', consents: [CAMERA_CONSENT] },
+      repository: repo,
+    });
+    await emit(JOIN_URL);
+    await flush();
+    expect(screen.getByTestId('group-join-confirm')).toHaveTextContent(/parent needs to verify/);
+    expect(screen.queryByTestId('group-join-accept')).toBeNull();
+    await fireEvent.press(screen.getByTestId('group-join-decline'));
+    await flush();
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('group-join-confirm')).toBeNull();
   });
 
   it('INV-1 non-invite urls are ignored', async () => {
@@ -93,6 +147,8 @@ describe('squad invite links', () => {
     await renderNavigator({ initialRoute: 'Combine', initial: adult });
     await emit('pitchiq://join/ZZZZZZZZZZ');
     await flush();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
+    await flush();
     expect(screen.getByTestId('group-join-notice')).toHaveTextContent(/invalid, expired or full/);
   });
 
@@ -102,20 +158,27 @@ describe('squad invite links', () => {
     await renderNavigator({ initialRoute: 'Combine', initial: adult, repository: repo });
     await emit(JOIN_URL);
     await flush();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
+    await flush();
     expect(screen.getByTestId('group-join-notice')).toHaveTextContent(/Could not reach the server/);
   });
 
-  it('INV-3 under-13 gets the parent-verification notice', async () => {
+  it('INV-3 a server-side parental rejection (verified client) shows the parent notice', async () => {
     const repo = new DemoRepository();
     jest
       .spyOn(repo, 'joinGroupByInvite')
       .mockResolvedValue({ ok: false, reason: 'parental_consent_required' });
     await renderNavigator({
       initialRoute: 'Combine',
-      initial: { ageBracket: 'under_13', consents: [CAMERA_CONSENT] },
+      initial: {
+        ageBracket: 'under_13',
+        consents: [CAMERA_CONSENT, { ...CAMERA_CONSENT, type: 'parental_verified' }],
+      },
       repository: repo,
     });
     await emit(JOIN_URL);
+    await flush();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
     await flush();
     expect(screen.getByTestId('group-join-notice')).toHaveTextContent(
       'A parent needs to verify your account before you can join a squad.',
@@ -159,6 +222,8 @@ describe('squad invite links', () => {
     const spy = jest.spyOn(repo, 'joinGroupByInvite');
     await renderNavigator({ initialRoute: 'Combine', initial: adult, repository: repo });
     await emit(JOIN_URL);
+    await flush();
+    await fireEvent.press(screen.getByTestId('group-join-accept'));
     await flush();
     await flush();
     expect(spy).toHaveBeenCalledTimes(1);

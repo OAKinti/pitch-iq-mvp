@@ -157,8 +157,8 @@ try {
   });
   const purgeBody = await withAuth.json().catch(() => null);
   check(
-    'purge-raw-video with cron token -> ok',
-    withAuth.status === 200 && purgeBody?.ok === true,
+    'purge-raw-video with cron token -> ok (rows + storage sweep)',
+    withAuth.status === 200 && purgeBody?.ok === true && purgeBody?.sweep?.ok === true,
     `${withAuth.status} ${JSON.stringify(purgeBody)}`,
   );
 } catch (e) {

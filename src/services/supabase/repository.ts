@@ -160,7 +160,7 @@ export class DemoRepository implements PitchIqRepository {
 
 interface MemberRow {
   user_id: string;
-  profiles: { display_name: string } | { display_name: string }[] | null;
+  display_name: string | null;
 }
 interface ResultRow {
   user_id: string;
@@ -229,10 +229,9 @@ export class SupabaseRepository implements PitchIqRepository {
   }
 
   async listGroupMembers(groupId: string): Promise<GroupMemberStat[]> {
-    const membersRes = await this.client
-      .from('group_members')
-      .select('user_id, profiles(display_name)')
-      .eq('group_id', groupId);
+    // Names come from the members-only RPC (migration 007): co-members never read profile rows,
+    // and an unverified under-13 is returned as 'Player'.
+    const membersRes = await this.client.rpc('squad_member_names', { p_group_id: groupId });
     if (membersRes.error) throw new Error(`listGroupMembers failed: ${membersRes.error.message}`);
     const rows = (membersRes.data ?? []) as unknown as MemberRow[];
 
@@ -244,12 +243,11 @@ export class SupabaseRepository implements PitchIqRepository {
     const results = (resultsRes.data ?? []) as unknown as ResultRow[];
 
     const stats = rows.map((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
       const mine = results.filter((r) => r.user_id === row.user_id);
       const days = new Set(mine.map((r) => r.submitted_at.slice(0, 10)));
       return {
         userId: row.user_id,
-        displayName: profile?.display_name ?? 'Player',
+        displayName: row.display_name || 'Player',
         bestOvr: mine.reduce((best, r) => Math.max(best, Number(r.ovr)), 0),
         activeDays: [...days].sort(),
       };

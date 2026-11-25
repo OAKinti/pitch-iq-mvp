@@ -94,6 +94,11 @@ function fakeClient(opts: { responses: Record<string, Resp> }) {
   };
   const client = {
     from: (t: string) => chain(t),
+    // Member list read goes through the squad_member_names RPC (migration 007).
+    rpc: (fn: string) => {
+      calls.push({ table: fn, op: 'rpc' });
+      return Promise.resolve(opts.responses[fn === 'squad_member_names' ? 'group_members' : fn] ?? { data: [], error: null });
+    },
     channel: jest.fn(() => channel),
     removeChannel,
   } as unknown as SupabaseClient;
@@ -135,9 +140,9 @@ describe('SupabaseRepository (fake client)', () => {
   const okResponses: Record<string, Resp> = {
     group_members: {
       data: [
-        { user_id: 'a', profiles: { display_name: 'Ann' } },
-        { user_id: 'b', profiles: [{ display_name: 'Bo' }] },
-        { user_id: 'c', profiles: null },
+        { user_id: 'a', display_name: 'Ann' },
+        { user_id: 'b', display_name: 'Bo' },
+        { user_id: 'c', display_name: null },
       ],
       error: null,
     },
@@ -183,7 +188,7 @@ describe('SupabaseRepository (fake client)', () => {
     const noResults = new SupabaseRepository(
       fakeClient({
         responses: {
-          group_members: { data: [{ user_id: 'a', profiles: null }], error: null },
+          group_members: { data: [{ user_id: 'a', display_name: null }], error: null },
           group_session_results: { data: null, error: null },
         },
       }).client,

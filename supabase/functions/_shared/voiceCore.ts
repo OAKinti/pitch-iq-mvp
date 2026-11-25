@@ -366,6 +366,11 @@ export interface DebriefDeps {
    * propagates (fail closed, the edge function answers 502).
    */
   tier2Status(userId: string): Promise<Tier2Status>;
+  /**
+   * B-6: project-wide daily ceiling (public.reserve_global_debrief, migration 007) so creating many
+   * anonymous accounts cannot multiply provider spend. false => 429 rate_limited, nothing reserved.
+   */
+  reserveGlobal(): Promise<boolean>;
   /** Month (YYYY-MM-01) reserved, or null when the monthly cap would be exceeded. */
   reserveChars(userId: string, chars: number): Promise<string | null>;
   refundChars(userId: string, month: string, chars: number): Promise<void>;
@@ -392,6 +397,8 @@ export async function handleDebrief(
 
   const tier2 = await deps.tier2Status(userId);
   if (tier2 !== 'ok') return { status: 200, body: { ok: false, reason: tier2 } };
+
+  if (!(await deps.reserveGlobal())) return { status: 429, body: { ok: false, reason: 'rate_limited' } };
 
   const month = await deps.reserveChars(userId, DEBRIEF_RESERVE_CHARS);
   if (month === null) return { status: 200, body: { ok: false, reason: 'monthly_cap' } };

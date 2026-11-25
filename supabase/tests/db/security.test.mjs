@@ -91,7 +91,9 @@ test('H-consent: a user cannot DELETE their profile (would reset age and cascade
     [kid],
   );
   const msg = await failure(
-    asCommit(db, 'authenticated', kid, (t) => t.query('delete from public.profiles where id = $1', [kid])),
+    asCommit(db, 'authenticated', kid, (t) =>
+      t.query('delete from public.profiles where id = $1', [kid]),
+    ),
   );
   assert.match(msg ?? '', /permission denied/);
   const p = await db.query('select age_bracket from public.profiles where id = $1', [kid]);
@@ -169,10 +171,16 @@ test('H-groups: co-members cannot read an unverified under-13 profile', async ()
     t.query('select id from public.profiles where id = $1', [kid]),
   );
   assert.equal(r.rows.length, 0);
+  // Since 007 co-members read NO profile rows (names come from squad_member_names); a verified
+  // minor's name is visible there instead.
   const v = await as(db, 'authenticated', owner, (t) =>
-    t.query('select id from public.profiles where id = $1', [kidVerified]),
+    t.query('select display_name from public.squad_member_names($1) where user_id = $2', [
+      groupId,
+      kidVerified,
+    ]),
   );
-  assert.equal(v.rows.length, 1, 'a parent-verified minor is visible to co-members');
+  assert.equal(v.rows.length, 1, 'a parent-verified minor appears by name to co-members');
+  assert.notEqual(v.rows[0].display_name, 'Player');
 });
 
 // ── H-purge / Medium: SECURITY DEFINER functions ──

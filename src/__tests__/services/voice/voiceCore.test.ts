@@ -46,6 +46,10 @@ function mkDeps(over: Partial<DebriefDeps> = {}) {
       calls.push('tier2');
       return 'ok' as const;
     }),
+    reserveGlobal: jest.fn(async () => {
+      calls.push('global');
+      return true;
+    }),
     reserveChars: jest.fn(async () => {
       calls.push('reserve');
       return '2026-11-01';
@@ -472,7 +476,7 @@ describe('handleDebrief', () => {
         usage: { inputTokens: 100, outputTokens: 20 },
       },
     });
-    expect(calls).toEqual(['tier2', 'reserve', 'complete', 'refund', 'tts']);
+    expect(calls).toEqual(['tier2', 'global', 'reserve', 'complete', 'refund', 'tts']);
     expect(deps.reserveChars).toHaveBeenCalledWith('user-1', DEBRIEF_RESERVE_CHARS);
     expect(deps.refundChars).toHaveBeenCalledWith(
       'user-1',
@@ -639,6 +643,14 @@ describe('D-9C Tier-2 gate (under-13 needs verifiable parental consent)', () => 
       expect(deps.tts).not.toHaveBeenCalled();
     },
   );
+
+  it('B-6: the global daily ceiling returns 429 rate_limited before any per-user reserve or provider call', async () => {
+    const { deps, calls } = mkDeps({ reserveGlobal: jest.fn(async () => false) });
+    expect(await handleDebrief(raw(), 'u', deps)).toEqual({ status: 429, body: { ok: false, reason: 'rate_limited' } });
+    expect(calls).toEqual(['tier2']);
+    expect(deps.reserveChars).not.toHaveBeenCalled();
+    expect(deps.complete).not.toHaveBeenCalled();
+  });
 
   it('a tier2Status failure fails closed before any spend', async () => {
     const { deps } = mkDeps({

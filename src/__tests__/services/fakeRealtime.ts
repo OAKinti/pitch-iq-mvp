@@ -107,7 +107,7 @@ export function createFakeRealtimeServer() {
         table === 'group_members'
           ? arrange(members, order).map((m) => ({
               user_id: m.userId,
-              profiles: { display_name: m.displayName },
+              display_name: m.displayName,
             }))
           : arrange(results, order).map((r) => ({
               user_id: r.userId,
@@ -177,6 +177,8 @@ export function createFakeRealtimeServer() {
     const handle: ClientHandle = {
       client: {
         from,
+        // squad_member_names (migration 007) is the member list read; it behaves like the old select.
+        rpc: (fn: string) => issue(fn === 'squad_member_names' ? 'group_members' : fn),
         channel,
         removeChannel: () => {
           removeCalls += 1;

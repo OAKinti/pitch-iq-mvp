@@ -3,6 +3,7 @@ import {
   PURGE_PAGE_SIZE,
   STORAGE_REMOVE_BATCH,
   purgeExpiredRawVideos,
+  sweepStaleObjects,
   type ExpiredVideoRow,
   type PurgeDeps,
 } from '../../../supabase/functions/_shared/purgeCore';
@@ -118,5 +119,58 @@ describe('purgeExpiredRawVideos (90-day raw video TTL)', () => {
     const r = await purgeExpiredRawVideos(deps);
     expect(r).toMatchObject({ ok: true, pages: PURGE_MAX_PAGES });
     expect(deps.listExpired).toHaveBeenCalledTimes(PURGE_MAX_PAGES);
+  });
+});
+
+describe('sweepStaleObjects (B-6: orphans and debrief-audio TTL)', () => {
+  function fakeBuckets(raw: number, audio: number) {
+    const buckets: Record<string, Set<string>> = {
+      'raw-video': new Set(Array.from({ length: raw }, (_, i) => `u1/old-${i}.mp4`)),
+      'debrief-audio': new Set(Array.from({ length: audio }, (_, i) => `u1/old-${i}.mp3`)),
+    };
+    const rowPaths = new Set(['u1/old-0.mp4', 'u1/old-1.mp4']); // two rows still point at stale objects
+    const deps = {
+      listStaleObjects: jest.fn(async (bucket: 'raw-video' | 'debrief-audio', limit: number) =>
+        [...buckets[bucket]!].slice(0, limit),
+      ),
+      removeFromBucket: jest.fn(async (bucket: 'raw-video' | 'debrief-audio', names: readonly string[]) => {
+        expect(names.length).toBeLessThanOrEqual(STORAGE_REMOVE_BATCH);
+        for (const n of names) buckets[bucket]!.delete(n);
+      }),
+      clearPathsByName: jest.fn(async (names: readonly string[]) => {
+        let n = 0;
+        for (const p of names) if (rowPaths.delete(p)) n++;
+        return n;
+      }),
+    };
+    return { buckets, rowPaths, deps };
+  }
+
+  it('deletes every stale object in both buckets across pages and clears dangling raw-video pointers', async () => {
+    const f = fakeBuckets(PURGE_PAGE_SIZE + 37, 12);
+    expect(await sweepStaleObjects(f.deps)).toEqual({
+      ok: true,
+      removed: { 'raw-video': PURGE_PAGE_SIZE + 37, 'debrief-audio': 12 },
+      rowsCleared: 2,
+    });
+    expect(f.buckets['raw-video']!.size).toBe(0);
+    expect(f.buckets['debrief-audio']!.size).toBe(0);
+    expect(f.rowPaths.size).toBe(0);
+    // pointers are only cleared for raw-video
+    expect(f.deps.clearPathsByName.mock.calls.flat(2).every((n) => String(n).endsWith('.mp4'))).toBe(true);
+  });
+
+  it('stops at the failing stage without throwing', async () => {
+    const f = fakeBuckets(3, 3);
+    await expect(
+      sweepStaleObjects({ ...f.deps, removeFromBucket: () => Promise.reject(new Error('503')) }),
+    ).resolves.toMatchObject({ ok: false, stage: 'remove', bucket: 'raw-video' });
+    await expect(
+      sweepStaleObjects({ ...f.deps, listStaleObjects: () => Promise.reject(new Error('pg')) }),
+    ).resolves.toMatchObject({ ok: false, stage: 'list', bucket: 'raw-video' });
+    const g = fakeBuckets(3, 0);
+    await expect(
+      sweepStaleObjects({ ...g.deps, clearPathsByName: () => Promise.reject(new Error('pg')) }),
+    ).resolves.toMatchObject({ ok: false, stage: 'clear', bucket: 'raw-video' });
   });
 });
