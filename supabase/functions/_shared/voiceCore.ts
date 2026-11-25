@@ -22,7 +22,12 @@ export type DebriefFailureReasonShape =
   | 'body_too_large'
   | 'unauthorized'
   | 'rate_limited'
-  | 'llm_error';
+  | 'llm_error'
+  | 'profile_required'
+  | 'parental_consent_required';
+
+/** D-9C: result of public.voice_tier2_status (migration 004). */
+export type Tier2Status = 'ok' | 'profile_required' | 'parental_consent_required';
 
 export type DebriefMetricsShape =
   | {
@@ -355,6 +360,12 @@ export type CompletionResult =
   | { kind: 'llm_error' };
 
 export interface DebriefDeps {
+  /**
+   * D-9C: Tier 2 sends drill/wearable data to Anthropic + ElevenLabs (third parties). Under-13 users
+   * need verifiable parental consent first. Checked before any reserve or provider call; a rejection
+   * propagates (fail closed, the edge function answers 502).
+   */
+  tier2Status(userId: string): Promise<Tier2Status>;
   /** Month (YYYY-MM-01) reserved, or null when the monthly cap would be exceeded. */
   reserveChars(userId: string, chars: number): Promise<string | null>;
   refundChars(userId: string, month: string, chars: number): Promise<void>;
@@ -378,6 +389,9 @@ export async function handleDebrief(
   const parsed = parseDebriefRequest(rawBody);
   if (!parsed.ok) return { status: parsed.status, body: { ok: false, reason: parsed.reason } };
   const req = parsed.value;
+
+  const tier2 = await deps.tier2Status(userId);
+  if (tier2 !== 'ok') return { status: 200, body: { ok: false, reason: tier2 } };
 
   const month = await deps.reserveChars(userId, DEBRIEF_RESERVE_CHARS);
   if (month === null) return { status: 200, body: { ok: false, reason: 'monthly_cap' } };
@@ -434,6 +448,8 @@ export async function handleDebrief(
 /* ───────────────────────────── Q&A handler ───────────────────────────── */
 
 export interface QaDeps {
+  /** D-9C: same gate as debriefs; a non-ok status grants nothing. */
+  tier2Status(userId: string): Promise<Tier2Status>;
   consumeQa(userId: string, seconds: number): Promise<{ granted: number; remaining: number }>;
 }
 
@@ -445,7 +461,7 @@ export async function handleQa(
   status: 200 | 400 | 413;
   body:
     | { ok: true; grantedSeconds: number; remainingSeconds: number }
-    | { ok: false; reason: 'invalid_request' | 'body_too_large' };
+    | { ok: false; reason: 'invalid_request' | 'body_too_large' | Exclude<Tier2Status, 'ok'> };
 }> {
   if (typeof rawBody !== 'string')
     return { status: 400, body: { ok: false, reason: 'invalid_request' } };
@@ -467,6 +483,8 @@ export async function handleQa(
   ) {
     return { status: 400, body: { ok: false, reason: 'invalid_request' } };
   }
+  const tier2 = await deps.tier2Status(userId);
+  if (tier2 !== 'ok') return { status: 200, body: { ok: false, reason: tier2 } };
   const { granted, remaining } = await deps.consumeQa(userId, seconds);
   return { status: 200, body: { ok: true, grantedSeconds: granted, remainingSeconds: remaining } };
 }

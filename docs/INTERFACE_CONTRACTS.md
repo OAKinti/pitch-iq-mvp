@@ -1,4 +1,4 @@
-# Interface Contracts (FROZEN — v1.1.0, Nov 24 2026; v1.0.0 Nov 22)
+# Interface Contracts (FROZEN — v1.2.0, Nov 24 2026; v1.1.0 Nov 24; v1.0.0 Nov 22)
 
 Types live in [`src/types/contracts.ts`](../src/types/contracts.ts). Tokens live in
 [`src/theme/tokens.ts`](../src/theme/tokens.ts). Schema lives in
@@ -173,3 +173,13 @@ Gate: the Combine screen must refuse to start tracking until `camera_skeletal_tr
 **Voice (D4.1a)**: `supabase/functions/_shared/usageTelemetry.ts` (`toUsageRecord`, `formatUsageLogLine`, `parseUsageLogLine`), `src/services/voice/costReport.ts` (`summarizeDebriefUsage`, `renderCostReport`), `scripts/debrief-cost-report.ts`.
 
 **Share (D6.2a)** — `src/services/share/index.ts`: `getShareConfig`/`ShareConfig`, `STICKER_CAPTURE_OPTIONS`, `createStickerCapture` (+ `StickerCapture*` types), `createSocialHandoff` (+ `SocialHandoff*`, `InstagramStoriesPayload`, `NativeSocialHandoff`, `SocialShareRequest` types), `createDefaultSocialHandoffDeps`, `getNativeSocialHandoff`. Component `OvrSticker` (`OvrStickerProps`), testIDs `ovr-sticker`, `ovr-sticker-value`, `ovr-sticker-band`, `ovr-sticker-position`. Only `socialHandoffBinding.ts` references `modules/social-handoff`, `react-native-share` and `expo-media-library`; only `stickerCapture.ts` references `react-native-view-shot`.
+
+## v1.2.0 additions (Nov 24, D-9 owner decisions A/B/C)
+
+**`src/types/contracts.ts`**: `DebriefFailureReason` gains `profile_required` and `parental_consent_required`; `CONTRACT_VERSION = '1.2.0'`.
+
+**Schema — `supabase/migrations/004_security_hardening.sql`** (tested on Postgres by `npm run test:db`): profiles column lockdown + `profiles_guard` trigger (API roles never set `parental_consent_verified_at`; `age_bracket` fixed once written); insert-only consents (no `parental_verified`, revoke via `revoked_at`); invite-only squads: `group_invites`, `create_group_invite(uuid) → text`, `join_group_by_invite(text) → uuid` (errors `not_authenticated`, `not_a_member`, `profile_required`, `parental_consent_required`, `invite_invalid`), owner auto-membership trigger; membership-checked group results; under-13 profiles hidden from co-members until parent-verified; `purge_expired_raw_videos()` service_role only and the SQL-only cron job unscheduled; `created_at`/TTL pinned server-side; `raw_video_path` must start with `<user_id>/`; `voice_tier2_status(uuid) → ok | profile_required | parental_consent_required` (service_role only).
+
+**Server — `voiceCore`**: `DebriefDeps.tier2Status` and `QaDeps.tier2Status` (required); a non-`ok` status returns 200 `{ok:false, reason}` before any reserve, provider or TTS call.
+
+**Client (S2/S3)**: `createAuthService` / `AuthSession` (anonymous sign-in, persisted session), repository `saveProfile`, insert-only `recordConsent`, `createGroupInvite` / `joinGroupByInvite`, deep link `pitchiq://join/<CODE>`.

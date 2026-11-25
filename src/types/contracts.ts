@@ -12,7 +12,7 @@
  *    by `sanitizePoseFrame` before any frame leaves the CV layer.
  */
 
-export const CONTRACT_VERSION = '1.1.0' as const; // v1.1.0 (Nov 24, D-6): debrief wire types
+export const CONTRACT_VERSION = '1.2.0' as const; // v1.2.0 (Nov 24, D-9): auth, invites, under-13 Tier-2 gate
 
 /* ────────────────────────────── Sport scope ────────────────────────────── */
 
@@ -446,7 +446,11 @@ export type DebriefFailureReason =
   | 'body_too_large'
   | 'unauthorized'
   | 'rate_limited'
-  | 'llm_error';
+  | 'llm_error'
+  /** D-9C (v1.2.0): no profile row for the caller yet. */
+  | 'profile_required'
+  /** D-9C (v1.2.0): under-13 without verifiable parental consent; Tier 2 is never sent. */
+  | 'parental_consent_required';
 
 /**
  * HTTP: 200 ok | 200 monthly_cap | 200 refused | 400 invalid_request, invalid_source,

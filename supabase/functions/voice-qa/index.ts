@@ -34,6 +34,12 @@ Deno.serve(async (req: Request) => {
   const capSeconds = Number.isFinite(parsedCap) ? parsedCap : 300;
 
   const deps: QaDeps = {
+    async tier2Status(uid) {
+      // D-9C: under-13 without verifiable parental consent never reaches a third-party provider.
+      const { data, error } = await service.rpc('voice_tier2_status', { p_user_id: uid });
+      if (error) throw new Error('tier2_status_failed');
+      return data === 'ok' || data === 'parental_consent_required' ? data : 'profile_required';
+    },
     async consumeQa(uid, seconds) {
       const { data, error } = await service.rpc('consume_qa_seconds', {
         p_user_id: uid,

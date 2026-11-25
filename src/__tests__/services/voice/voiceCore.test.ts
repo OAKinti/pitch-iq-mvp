@@ -42,6 +42,10 @@ const wearable = (source = 'whoop') => ({
 function mkDeps(over: Partial<DebriefDeps> = {}) {
   const calls: string[] = [];
   const deps: DebriefDeps = {
+    tier2Status: jest.fn(async () => {
+      calls.push('tier2');
+      return 'ok' as const;
+    }),
     reserveChars: jest.fn(async () => {
       calls.push('reserve');
       return '2026-11-01';
@@ -468,7 +472,7 @@ describe('handleDebrief', () => {
         usage: { inputTokens: 100, outputTokens: 20 },
       },
     });
-    expect(calls).toEqual(['reserve', 'complete', 'refund', 'tts']);
+    expect(calls).toEqual(['tier2', 'reserve', 'complete', 'refund', 'tts']);
     expect(deps.reserveChars).toHaveBeenCalledWith('user-1', DEBRIEF_RESERVE_CHARS);
     expect(deps.refundChars).toHaveBeenCalledWith(
       'user-1',
@@ -618,8 +622,51 @@ describe('handleDebrief', () => {
   });
 });
 
+describe('D-9C Tier-2 gate (under-13 needs verifiable parental consent)', () => {
+  const raw = () => body(base());
+
+  it.each(['parental_consent_required', 'profile_required'] as const)(
+    '%s -> 200 ok:false with no reserve, provider or TTS call',
+    async (status) => {
+      const { deps, calls } = mkDeps({ tier2Status: jest.fn(async () => status) });
+      expect(await handleDebrief(raw(), 'kid-1', deps)).toEqual({
+        status: 200,
+        body: { ok: false, reason: status },
+      });
+      expect(calls).toEqual([]);
+      expect(deps.reserveChars).not.toHaveBeenCalled();
+      expect(deps.complete).not.toHaveBeenCalled();
+      expect(deps.tts).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a tier2Status failure fails closed before any spend', async () => {
+    const { deps } = mkDeps({
+      tier2Status: async () => {
+        throw new Error('rpc');
+      },
+    });
+    await expect(handleDebrief(raw(), 'u', deps)).rejects.toThrow('rpc');
+    expect(deps.reserveChars).not.toHaveBeenCalled();
+    expect(deps.complete).not.toHaveBeenCalled();
+  });
+
+  it('voice-qa grants nothing without Tier-2 permission', async () => {
+    const deps = {
+      tier2Status: jest.fn(async () => 'parental_consent_required' as const),
+      consumeQa: jest.fn(async () => ({ granted: 60, remaining: 240 })),
+    };
+    expect(await handleQa('{"seconds":60}', 'kid-1', deps)).toEqual({
+      status: 200,
+      body: { ok: false, reason: 'parental_consent_required' },
+    });
+    expect(deps.consumeQa).not.toHaveBeenCalled();
+  });
+});
+
 describe('handleQa', () => {
   const mk = (granted = 60, remaining = 240) => ({
+    tier2Status: jest.fn(async () => 'ok' as const),
     consumeQa: jest.fn(async () => ({ granted, remaining })),
   });
 

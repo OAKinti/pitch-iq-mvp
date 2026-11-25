@@ -41,3 +41,7 @@ jest.mock('expo-audio', () => ({
 }));
 // expo-mediapipe-pose (D2.0): native module absent in jest; src/services/cv binds it lazily.
 jest.mock('expo-mediapipe-pose', () => ({}));
+// AsyncStorage (v1.2.0, D-9A): official in-memory mock for the persisted auth session + local profile.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);

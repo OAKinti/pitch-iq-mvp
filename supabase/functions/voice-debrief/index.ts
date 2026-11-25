@@ -43,6 +43,12 @@ Deno.serve(async (req: Request) => {
   const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
   const deps: DebriefDeps = {
+    async tier2Status(uid) {
+      // D-9C: under-13 without verifiable parental consent never reaches a third-party provider.
+      const { data, error } = await service.rpc('voice_tier2_status', { p_user_id: uid });
+      if (error) throw new Error('tier2_status_failed');
+      return data === 'ok' || data === 'parental_consent_required' ? data : 'profile_required';
+    },
     async reserveChars(uid, chars) {
       const { data, error } = await service.rpc('reserve_debrief_chars', {
         p_user_id: uid,

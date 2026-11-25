@@ -36,6 +36,7 @@ function mkDeps(
   tts: string | null = 'https://signed/a.mp3',
 ): DebriefDeps {
   return {
+    tier2Status: async () => 'ok',
     reserveChars: async () => MONTH,
     refundChars: async () => undefined,
     complete: async () => complete,
