@@ -92,10 +92,6 @@
         }
       ],
       [
-        "expo-mediapipe-pose",
-        "PitchIQ uses the camera to track your body's skeletal joints during drills. No facial geometry is collected, and tracking only starts after you give consent."
-      ],
-      [
         "react-native-share",
         {
           "ios": [],
@@ -108,6 +104,12 @@
         }
       ],
       "expo-asset"
-    ]
+    ],
+    "owner": "oakinti",
+    "extra": {
+      "eas": {
+        "projectId": "67e870a0-0adb-48ff-8b94-f31bc6ddf3c8"
+      }
+    }
   }
 }

@@ -69,7 +69,10 @@ describe('release config', () => {
     }
     const cam = plist.NSCameraUsageDescription as string;
     expect(opts('expo-camera').cameraPermission).toBe(cam);
-    expect(plugin('expo-mediapipe-pose')).toBe(cam);
+    // expo-mediapipe-pose's plugin only set this same string and cannot be resolved by eas-cli (its
+    // package exports omit ./app.plugin.js), so the entry was removed; infoPlist + expo-camera set it.
+    expect(plugin('expo-mediapipe-pose')).toBeUndefined();
+    expect(expo.ios.infoPlist.NSCameraUsageDescription).toBe(cam);
     expect(cam).toMatch(/skeletal/i);
     expect(cam).toMatch(/consent/i);
     const mic = plist.NSMicrophoneUsageDescription as string;
@@ -144,7 +147,6 @@ describe('release config', () => {
       'expo-audio',
       'expo-camera',
       'expo-media-library',
-      'expo-mediapipe-pose',
       'react-native-share',
       'expo-asset',
     ]);
