@@ -112,6 +112,17 @@ try {
   );
   const join = await friend.c.rpc('join_group_by_invite', { p_code: inv.data });
   check('friend joins via invite', join.data === groupId, join.error?.message);
+  const names = await owner.c.rpc('squad_member_names', { p_group_id: groupId });
+  check(
+    'squad_member_names: members only, names only',
+    (names.data ?? []).length === 2 &&
+      Object.keys(names.data?.[0] ?? {})
+        .sort()
+        .join() === 'display_name,user_id',
+    names.error?.message ?? `${(names.data ?? []).length} rows`,
+  );
+  const peek = await owner.c.from('profiles').select('age_bracket').eq('id', friend.id);
+  check('co-members cannot read each other’s profile rows', (peek.data ?? []).length === 0);
   const kidJoin = await kid.c.rpc('join_group_by_invite', { p_code: inv.data });
   check(
     'unverified under-13 join refused',

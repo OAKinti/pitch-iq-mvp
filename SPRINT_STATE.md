@@ -17,8 +17,8 @@
 > Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 2–3. All agent waves + the D-9 security wave are done: PR #3 (D2.0, D6.0) → #4 (waves 1–2) → #5 (D5.1a, D7.2 audits) → PR-D `claude/sprint-security` (migration 004, anonymous auth, invite squads, under-13 gate). Merge in that order.
-- **Next task:** B-6 pre-launch Mediums (agent-fixable). Owner: deploy steps in `docs/RELEASE_CHECKLIST.md` → *Database and scheduled jobs* (needs `npx supabase login`), D2.1/D2.2 device checks, choose a VPC provider (D-9C).
+- **Current day:** Day 3 (Nov 25). All agent work + D-9 security + B-6 Mediums done and **deployed** to Supabase `pitchiq-mvp` (ref `rindwhaciqfovylqhqdq`; migrations 001–007, anonymous auth, nightly purge, 3 edge functions; live smoke 19/19). PRs: #3 → #4 → #5 → #6 (`claude/sprint-security`) → PR-E (`claude/sprint-b6`). Merge in that order.
+- **Next task:** owner: install the Android Dev Client from the EAS build (see session log) and run D2.1/D2.2 on a phone with `npx expo start --dev-client`; add voice keys when available (`docs/RELEASE_CHECKLIST.md`); choose a VPC provider (D-9C); CAPTCHA site key for anonymous sign-up (B-6). Agent: remaining B-6 Lows.
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
@@ -102,11 +102,7 @@
   - Low: client Q&A budget not wired to `voice-qa`; debrief audio has no TTL; Android mic permission on in expo-camera but off in expo-audio.
   - code-scout Mediums (no Critical/High client-side): stale debrief can overwrite a newer drill's (`AppStateContext.tsx:211`); double-tap `drill-view-results` runs completeDrill twice (`CombineDrillScreen.tsx:104`).
 
-- **B-6 (agent-fixable, fix before public launch; D7.2 re-audit Nov 24, GO-WITH-FIXES):**
-  - M deep links join a squad without confirmation, and co-members can read the whole profile row (age_bracket, verification status) → confirm screen before join + co-members see `display_name` only (view / column grant).
-  - M anonymous-account farming multiplies the per-user voice quota → CAPTCHA token on `signInAnonymously` + a global daily spend cap in `voice-debrief`.
-  - M raw video can escape the 90-day purge: direct uploads with no `drill_sessions` row, row deletes, path overwrites → also sweep `storage.objects` (`raw-video`) older than 90 days, or block delete/overwrite while a path is set.
-  - L debrief audio has no TTL; Android mic permission on in expo-camera, off in expo-audio; client-set `granted_at` and re-nullable `revoked_at`; path check allows `..`; `pitchiq://` scheme can be claimed by another app (move invites to a verified universal link / App Link); abandoned anonymous accounts never purged; server age bracket never read back; client Q&A not wired to `voice-qa` (no Tier 3 UI yet).
+- **B-6 (D7.2 re-audit Nov 24, GO-WITH-FIXES) — Mediums FIXED + deployed Nov 25 (PR-E, migration 007):** confirm-before-join + names-only `squad_member_names()` (no co-member profile reads); global daily Tier-2 ceiling `reserve_global_debrief` (after the per-user cap, refunded on 429); storage-age sweep (raw-video > 90 d, debrief-audio > 30 d) in `purge-raw-video`; Lows fixed: debrief-audio TTL, `..` paths, server-stamped `granted_at` / `revoked_at`, irreversible revocation. **Still open (Low):** CAPTCHA on anonymous sign-up (owner: hCaptcha/Turnstile site + secret key); `pitchiq://` scheme can be claimed by another app (move invites to a verified universal link / App Link, needs a domain); abandoned anonymous accounts never purged; server age bracket never read back into the app; Android mic permission on in expo-camera, off in expo-audio; client Q&A not wired to `voice-qa` (no Tier 3 UI yet).
 
 ## Contract changes
 - v1.2.0 (Nov 24, D-9): `DebriefFailureReason` + `profile_required`, `parental_consent_required`; migration 004; anonymous auth, invite RPCs, under-13 Tier-2 gate.
@@ -121,6 +117,11 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-25 — local (Opus 5.5, owner asleep, explicit OK for everything) — claude/sprint-security + claude/sprint-b6
+- Did: created Supabase project `pitchiq-mvp` (org OAK, us-east-1, free tier); `supabase init` → `supabase/config.jsonc` (anonymous sign-ins on, `site_url pitchiq://`); `db push --remote` 001–007; `config push`; Vault secrets `purge_cron_secret` + `project_url`; edge secret `PURGE_CRON_SECRET` (purge-only token, scheduler never holds the service key); migration 005 = pg_cron + pg_net nightly purge (03:15 UTC); 006 = Supabase security-advisor fixes; deployed `voice-debrief`, `voice-qa`, `purge-raw-video` (`--use-api`, no Docker). `.env` (git-ignored) now has `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` (publishable key), `EXPO_PUBLIC_DEMO_MODE=false`, server-only `SUPABASE_DB_PASSWORD`, `PURGE_CRON_SECRET`. EAS: `eas init` → `@oakinti/pitch-iq-mvp`; removed the `expo-mediapipe-pose` plugin entry (eas-cli cannot resolve it; it only set the same camera text); Android development build `2b4a24dc-fa02-443f-9c53-7c311781f861`. B-6 Mediums fixed (PR-E, migration 007).
+- Verified: `npm run verify` → 0 (559 jest, 33 db tests); `node --env-file=.env scripts/smoke-live.mjs` → 19/19 against production (smoke users deleted after each run); `supabase db advisors --remote --type security` → only by-design warnings (anonymous sign-ins, invite RPCs). Cross-audits: B-6 round 1 FAIL (global ceiling before per-user cap = DoS) → fixed → round 2 PASS.
+- Gotchas: CLI 3.x hosted commands need `--remote` and `--yes` (`db push` without `--remote` silently targets local); `supabase test db` needs Docker (use `npm run test:db`); the admin API rejected the new `sb_secret_` key for user deletion (smoke script prints SQL fallback).
+- Next: owner installs the dev build and runs D2.1/D2.2; voice keys; VPC provider; CAPTCHA key.
 ### 2026-11-24 — local (Opus 5.5, Agenticverse security wave) — claude/sprint-security
 - Did: owner decided D-9 (A anonymous auth, B invite-link squads, C under-13 restricted until verifiable parental consent) and merged Person A + B into one owner with standing automation permission. Added `npm run test:db` (PGlite 0.5.16 + Supabase shim; 001–004 + 27 RLS/RPC tests, first execution of any migration), migration 004, Tier-2 gate in voiceCore/voice-debrief/voice-qa, contract v1.2.0, AsyncStorage. Builders: S2 anonymous auth + persisted profile/consents + locked age gate + RACE-1/2; S3 invite links + Group invite UI. Release checklist: purge scheduling (pg_cron + pg_net + Vault), anonymous sign-ins.
 - Verified: `npm run verify` → 0 (55 suites / 551 jest, 27 db tests, lint:tokens 0, compliance 16/16). Cross-audit round 1 FAIL (profile DELETE bypass, consent-before-profile FK order, localProfile race, vacuous tests) → fixed; round 2 PASS (3 minor → fixed, fix commit audited PASS). security-privacy-auditor re-audit: all previous Highs FIXED, RELEASE-BLOCKING: no → D7.2 ticked; new Mediums → B-6.
