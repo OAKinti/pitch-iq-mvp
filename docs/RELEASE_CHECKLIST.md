@@ -60,6 +60,24 @@ eas build --profile production --platform android
 - [ ] `[human:B]` Download the `.aab` from the EAS build page. In Play Console open Internal App Sharing, upload the `.aab` and copy the share link. Store-track uploads via `eas submit --platform android` need a service account and are out of scope for the MVP.
 - [ ] `[human:B]` `[device]` Open the share link on a phone, install and run the smoke test below.
 
+## Database and scheduled jobs (contract v1.2.0)
+- [ ] `npm run test:db` is green locally (migrations 001–004 and the RLS tests on PGlite).
+- [ ] `npx supabase db push` applies 001–004, then `npx supabase test db` (pgTAP) passes.
+- [ ] Enable `pg_cron` and `pg_net`. Store the service-role key in Vault under the name `purge_job_key`.
+- [ ] Schedule the raw-video purge edge function. Migration 004 removed the SQL-only job, which nulled pointers without deleting files:
+  ```sql
+  select cron.schedule('purge-raw-video-edge', '15 3 * * *', $job$
+    select net.http_post(
+      url     := 'https://<project-ref>.supabase.co/functions/v1/purge-raw-video',
+      headers := jsonb_build_object(
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'purge_job_key'),
+        'Content-Type', 'application/json'),
+      body    := '{}'::jsonb)
+  $job$);
+  ```
+- [ ] Enable **Anonymous sign-ins** (Dashboard → Authentication → Providers), per D-9A. Turn on CAPTCHA and rate limits for anonymous sign-up.
+- [ ] Deploy `voice-debrief`, `voice-qa` and `purge-raw-video`. Confirm an under-13 test profile gets `parental_consent_required` from `voice-debrief`.
+
 ## Privacy and store declarations
 
 - Camera: skeletal joint tracking only. Face landmarks 1-10 are redacted. No face or voice biometrics.

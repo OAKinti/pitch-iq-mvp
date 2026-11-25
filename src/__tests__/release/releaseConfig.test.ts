@@ -113,6 +113,7 @@ describe('release config', () => {
       'Secrets and environment',
       'iOS - TestFlight internal',
       'Android - Play Internal App Sharing',
+      'Database and scheduled jobs (contract v1.2.0)',
       'Privacy and store declarations',
       'Smoke test',
       'Rollback',
