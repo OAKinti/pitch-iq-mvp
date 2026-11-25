@@ -1,15 +1,17 @@
 // Deno edge function: nightly purge of raw video past its <= 90 day TTL.
-// Not type-checked by tsc. Invoke from pg_cron / Supabase scheduler with the service role key.
+// Not type-checked by tsc. Invoked nightly by pg_cron + pg_net (migration 005) with PURGE_CRON_SECRET,
+// a purge-only token, so the scheduler never holds the service-role key.
 // The paging + "clear a pointer only after its object is deleted" logic lives in
 // ../_shared/purgeCore.ts (jest-tested). This file only wires Supabase into it.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { purgeExpiredRawVideos, type ExpiredVideoRow } from '../_shared/purgeCore.ts';
 
 Deno.serve(async (req: Request) => {
-  // Only the service role may trigger a purge.
+  // Only the scheduler, holding the purge-only token, may trigger a purge.
+  const cronSecret = Deno.env.get('PURGE_CRON_SECRET') ?? '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-  if (!serviceKey || !timingSafeEqual(bearer, serviceKey)) {
+  if (cronSecret.length < 32 || !serviceKey || !timingSafeEqual(bearer, cronSecret)) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 

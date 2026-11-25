@@ -61,22 +61,17 @@ eas build --profile production --platform android
 - [ ] `[human:B]` `[device]` Open the share link on a phone, install and run the smoke test below.
 
 ## Database and scheduled jobs (contract v1.2.0)
-- [ ] `npm run test:db` is green locally (migrations 001–004 and the RLS tests on PGlite).
-- [ ] `npx supabase db push` applies 001–004, then `npx supabase test db` (pgTAP) passes.
-- [ ] Enable `pg_cron` and `pg_net`. Store the service-role key in Vault under the name `purge_job_key`.
-- [ ] Schedule the raw-video purge edge function. Migration 004 removed the SQL-only job, which nulled pointers without deleting files:
-  ```sql
-  select cron.schedule('purge-raw-video-edge', '15 3 * * *', $job$
-    select net.http_post(
-      url     := 'https://<project-ref>.supabase.co/functions/v1/purge-raw-video',
-      headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'purge_job_key'),
-        'Content-Type', 'application/json'),
-      body    := '{}'::jsonb)
-  $job$);
-  ```
-- [ ] Enable **Anonymous sign-ins** (Dashboard → Authentication → Providers), per D-9A. Turn on CAPTCHA and rate limits for anonymous sign-up.
-- [ ] Deploy `voice-debrief`, `voice-qa` and `purge-raw-video`. Confirm an under-13 test profile gets `parental_consent_required` from `voice-debrief`.
+Project: `pitchiq-mvp` (ref `rindwhaciqfovylqhqdq`, org OAK, us-east-1), created and linked Nov 25. All of the steps below are CLI-only, so no dashboard clicks are needed. With CLI 3.x, every hosted command needs `--remote` and `--yes`.
+
+- [x] `npm run test:db` is green locally (migrations 001–006 and the RLS tests on PGlite). `npx supabase test db` needs Docker; `test:db` replaces it here.
+- [x] `npx supabase db push --remote --password "$SUPABASE_DB_PASSWORD" --yes` applies 001–006 (done Nov 25).
+- [x] Auth config, including **anonymous sign-ins** (D-9A): `npx supabase config push --remote --yes` from `supabase/config.jsonc`.
+- [x] Nightly raw-video purge: migration 005 enables `pg_cron` and `pg_net` and schedules `purge-raw-video-edge` at 03:15 UTC. It reads two Vault secrets at run time, `purge_cron_secret` and `project_url`. The same token is the edge secret `PURGE_CRON_SECRET`: purge-only, never the service-role key. To rotate it, update the Vault secret and run `npx supabase secrets set PURGE_CRON_SECRET=… --yes`.
+- [x] Deploy the functions: `npx supabase functions deploy voice-debrief voice-qa purge-raw-video --use-api --yes`.
+- [x] Live check: `node --env-file=.env scripts/smoke-live.mjs` (17 checks, Nov 25). Afterwards, delete the smoke users with the fallback SQL the script prints.
+- [ ] Voice keys, when you have them: `npx supabase secrets set ANTHROPIC_API_KEY=… ELEVENLABS_API_KEY=… ELEVENLABS_VOICE_CAPTAIN=… ELEVENLABS_VOICE_DRILL_SERGEANT=… ELEVENLABS_VOICE_HYPE=… --yes`. No redeploy is needed. Until they are set, debriefs fall back to the on-device template.
+- [ ] Before public launch: CAPTCHA for anonymous sign-up (B-6). Turn it on under Auth → Attack Protection, or set `auth.captcha` in `config.jsonc`.
+- Local `.env` (git-ignored) holds the server-only `SUPABASE_DB_PASSWORD` and `PURGE_CRON_SECRET`. These must never be `EXPO_PUBLIC_`. It also holds the public `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` (publishable key) and `EXPO_PUBLIC_DEMO_MODE=false`.
 
 ## Privacy and store declarations
 
