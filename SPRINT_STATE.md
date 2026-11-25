@@ -17,8 +17,8 @@
 > Agent lines ending in `a` are the no-device/no-secret half of the human/device line with the same number.
 
 ## Status
-- **Current day:** Day 2–3. All agent waves run: PR-A `claude/d2-0-prereq` (D2.0, D6.0), PR-B `claude/sprint-d2-d6` (D2.1a–D2.5a, D2.2b, D4.1a, D4.2a, D6.1a, D6.2a, D7.4a), PR-C `claude/sprint-d5-d7` (D5.1a, D7.2 partial).
-- **Next task:** **D7.2 is BLOCKED by B-5 (release-blocking, owner decisions + frozen migration 004).** Humans: Person A D2.1/D2.2 device checks (Dev Client from PR-A); Person B D2.3 → D2.4/D2.5 → D4.1, and review `docs/proposals/004_security_hardening.sql`.
+- **Current day:** Day 2–3. All agent waves + the D-9 security wave are done: PR #3 (D2.0, D6.0) → #4 (waves 1–2) → #5 (D5.1a, D7.2 audits) → PR-D `claude/sprint-security` (migration 004, anonymous auth, invite squads, under-13 gate). Merge in that order.
+- **Next task:** B-6 pre-launch Mediums (agent-fixable). Owner: deploy steps in `docs/RELEASE_CHECKLIST.md` → *Database and scheduled jobs* (needs `npx supabase login`), D2.1/D2.2 device checks, choose a VPC provider (D-9C).
 - **Branch policy:** agents → `claude/*`, humans → `feat/*`, `main` human-merged only
 
 ## Gates (block every track)
@@ -61,7 +61,7 @@
 
 ### Day 7 — Sat–Sun Nov 28–29 (field test & release)
 - [ ] D7.1 [human:A] [device] Outdoor grass/turf video: calibrate Butterworth cutoff + drill thresholds in `soccer-cv-math` and tests
-- [ ] D7.2 after D2.2b, D4.1a, D6.1a, D6.2a, D5.1a: `code-scout` bug triage; `security-privacy-auditor` read-only audit (RLS, COPPA, BIPA, Strava, secrets) + `/agenticverse audit-security` and `slim` — fix all Critical/High
+- [x] D7.2 after D2.2b, D4.1a, D6.1a, D6.2a, D5.1a: `code-scout` bug triage; `security-privacy-auditor` read-only audit (RLS, COPPA, BIPA, Strava, secrets) + `/agenticverse audit-security` and `slim` — fix all Critical/High
 - [ ] D7.3 [device] Full Maestro smoke suite green
 - [ ] D7.4 [secret:EXPO_TOKEN] after D7.4a: EAS build → TestFlight internal + Play Internal App Sharing
 - [ ] [HUMAN GATE 3] Owner: field-test sign-off on the pitch; MVP release go/no-go
@@ -93,7 +93,7 @@
 - B-2 (Owner) `uv` not installed — required for `build123d-mcp` (hardware track H1/H2; now HUMAN GATE 4, hardware only).
 - B-3 (Owner, non-blocking, defaults applied) Fable spec decisions: SEC-17 under-13 / unknown age ⇒ all sharing locked (`share-age-locked`); D7.4a `android.blockedPermissions` (media read, storage, location; never CAMERA/RECORD_AUDIO); TikTok iOS redirect URI needs a universal-link domain before D6.2.
 - B-4 (Person A, D6.1 follow-ups from wave-2 audit round 2, minor, no current trigger): `src/services/highlight/cameraMode.ts:75` settle the pending resolver before `emit()` in finishMount/onTimeout (CON-10); `src/services/highlight/highlightEncoderBinding.ts:85` reject echoed `durationMs <= 0` as `spec_mismatch` (FAIL-13). Known limit (D4.2a): Realtime publication carries only `group_session_results`, so roster joins/leaves reach other clients at the next result update.
-- **B-5 (Owner + Person B) RELEASE-BLOCKING, D7.2 security-privacy-auditor, Nov 24.** Agent fix landed for the purge edge function (paged, pointer cleared only after its object is deleted). Everything else is in the frozen schema or needs a decision, drafted in `docs/proposals/004_security_hardening.sql` (untested; copy to `supabase/migrations/004_…`, add the pgTAP checks, `supabase test db`):
+- ~~B-5~~ **Resolved Nov 24 by D-9 + PR-D** (re-audit: every previous High FIXED, RELEASE-BLOCKING: no). Original findings: **B-5 (Owner + Person B) RELEASE-BLOCKING, D7.2 security-privacy-auditor, Nov 24.** Agent fix landed for the purge edge function (paged, pointer cleared only after its object is deleted). Everything else is in the frozen schema or needs a decision, drafted in `docs/proposals/004_security_hardening.sql` (untested; copy to `supabase/migrations/004_…`, add the pgTAP checks, `supabase test db`):
   - H-purge: `purge_expired_raw_videos()` is SECURITY DEFINER with PUBLIC execute (anon can orphan expired videos) and 001's pg_cron job runs it alone, nulling pointers without deleting objects → revoke + unschedule + schedule the edge function (pg_net + Vault).
   - H-consent: clients can UPDATE their own `age_bracket` / `parental_consent_verified_at`, insert `parental_verified`, delete consents → table-level revoke + column grants, insert-only consents.
   - H-groups: anyone can join any group by id and then read co-members, including under-13 profiles → membership-checked result inserts + under-13 hidden until parent-verified (drafted); **decision B:** invite-code join.
@@ -102,7 +102,14 @@
   - Low: client Q&A budget not wired to `voice-qa`; debrief audio has no TTL; Android mic permission on in expo-camera but off in expo-audio.
   - code-scout Mediums (no Critical/High client-side): stale debrief can overwrite a newer drill's (`AppStateContext.tsx:211`); double-tap `drill-view-results` runs completeDrill twice (`CombineDrillScreen.tsx:104`).
 
+- **B-6 (agent-fixable, fix before public launch; D7.2 re-audit Nov 24, GO-WITH-FIXES):**
+  - M deep links join a squad without confirmation, and co-members can read the whole profile row (age_bracket, verification status) → confirm screen before join + co-members see `display_name` only (view / column grant).
+  - M anonymous-account farming multiplies the per-user voice quota → CAPTCHA token on `signInAnonymously` + a global daily spend cap in `voice-debrief`.
+  - M raw video can escape the 90-day purge: direct uploads with no `drill_sessions` row, row deletes, path overwrites → also sweep `storage.objects` (`raw-video`) older than 90 days, or block delete/overwrite while a path is set.
+  - L debrief audio has no TTL; Android mic permission on in expo-camera, off in expo-audio; client-set `granted_at` and re-nullable `revoked_at`; path check allows `..`; `pitchiq://` scheme can be claimed by another app (move invites to a verified universal link / App Link); abandoned anonymous accounts never purged; server age bracket never read back; client Q&A not wired to `voice-qa` (no Tier 3 UI yet).
+
 ## Contract changes
+- v1.2.0 (Nov 24, D-9): `DebriefFailureReason` + `profile_required`, `parental_consent_required`; migration 004; anonymous auth, invite RPCs, under-13 Tier-2 gate.
 - v1.0.0 frozen Nov 22.
 - v1.1.0 (Nov 24, D-6): `DebriefRequest`/`DebriefResponse` wire types in `src/types/contracts.ts`, migration `003_voice_usage_rpc.sql` (service-role-only quota RPCs), `DebriefTransport` v2 + `buildDebriefRequest` (code lands in D2.5a), CV slice row, new Combine testIDs `skeleton-overlay`/`telemetry-fps`/`pose-source`. D2.0 also installed the D-7 packages; Expo pinned `react-native-view-shot` to 6.1.1 (SDK 58 bundled version) instead of npm-latest 6.2.1.
 
@@ -114,6 +121,11 @@
 
 ## Session log
 <!-- newest first; see .claude/skills/sprint-handoff/SKILL.md -->
+### 2026-11-24 — local (Opus 5.5, Agenticverse security wave) — claude/sprint-security
+- Did: owner decided D-9 (A anonymous auth, B invite-link squads, C under-13 restricted until verifiable parental consent) and merged Person A + B into one owner with standing automation permission. Added `npm run test:db` (PGlite 0.5.16 + Supabase shim; 001–004 + 27 RLS/RPC tests, first execution of any migration), migration 004, Tier-2 gate in voiceCore/voice-debrief/voice-qa, contract v1.2.0, AsyncStorage. Builders: S2 anonymous auth + persisted profile/consents + locked age gate + RACE-1/2; S3 invite links + Group invite UI. Release checklist: purge scheduling (pg_cron + pg_net + Vault), anonymous sign-ins.
+- Verified: `npm run verify` → 0 (55 suites / 551 jest, 27 db tests, lint:tokens 0, compliance 16/16). Cross-audit round 1 FAIL (profile DELETE bypass, consent-before-profile FK order, localProfile race, vacuous tests) → fixed; round 2 PASS (3 minor → fixed, fix commit audited PASS). security-privacy-auditor re-audit: all previous Highs FIXED, RELEASE-BLOCKING: no → D7.2 ticked; new Mediums → B-6.
+- Not done: nothing deployed (no Supabase/EAS login on this machine; no supabase/eas/deno/docker CLIs installed). D7.3/D7.4 need a device / EXPO_TOKEN.
+- Next: B-6 (agent), owner deploy steps.
 ### 2026-11-24 — local (Opus 5.5, Agenticverse waves 3–4) — claude/sprint-d5-d7
 - Did: D5.1a (3 Maestro flows statically validated, WCAG contrast tests over tokens, reduce-motion fallbacks, share-screen sticker + under-13 lock, own-row rank contrast fix). D7.2: `/agenticverse audit-security` (0 Critical/High; 1 fake test key, 4 moderate build-tool npm advisories), `slim` (0 findings), code-scout (1 High: purge), security-privacy-auditor (RELEASE-BLOCKING: 4 High, 3 Medium, 4 Low → B-5). Fixed the purge edge function (new jest-tested `_shared/purgeCore.ts`); drafted migration 004 as a proposal (frozen area).
 - Verified: `npm run verify` → 0 (50 suites, 472 tests, coverage 99.48/98.36/100/99.83, lint:tokens 0, compliance 16/16). Cross-audit wave 3 PASS (0); wave 4 PASS (1 minor in the proposal SQL, fixed).
