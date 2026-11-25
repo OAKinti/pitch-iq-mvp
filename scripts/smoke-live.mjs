@@ -122,7 +122,7 @@ try {
     names.error?.message ?? `${(names.data ?? []).length} rows`,
   );
   const peek = await owner.c.from('profiles').select('age_bracket').eq('id', friend.id);
-  check('co-members cannot read each other’s profile rows', (peek.data ?? []).length === 0);
+  check('co-members cannot read each other’s profile rows', !peek.error && Array.isArray(peek.data) && peek.data.length === 0, peek.error?.message);
   const kidJoin = await kid.c.rpc('join_group_by_invite', { p_code: inv.data });
   check(
     'unverified under-13 join refused',
