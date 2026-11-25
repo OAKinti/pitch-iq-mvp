@@ -9,6 +9,7 @@ import type {
   PlayerPosition,
 } from '../../types/contracts';
 import type { AppConfig } from '../config';
+import { buildInviteUrl, INVITE_CODE_RE } from '../invites/inviteLink';
 import { getSupabaseClient } from './client';
 
 export interface ProfileInput {
@@ -19,6 +20,27 @@ export interface ProfileInput {
 }
 
 export type SyncStatus = 'ok' | 'offline' | 'error';
+
+export type JoinFailureReason =
+  | 'invite_invalid'
+  | 'parental_consent_required'
+  | 'profile_required'
+  | 'not_authenticated'
+  | 'offline';
+export type JoinResult = { ok: true; groupId: string } | { ok: false; reason: JoinFailureReason };
+
+/** Postgres exception text arrives in `message`; map by substring. Anything unknown is treated as offline. */
+function mapJoinError(message: string): JoinFailureReason {
+  for (const reason of [
+    'parental_consent_required',
+    'profile_required',
+    'not_authenticated',
+    'invite_invalid',
+  ] as const) {
+    if (message.includes(reason)) return reason;
+  }
+  return 'offline';
+}
 
 /** Parental verification is server-only (service_role); the client may never record it. */
 function assertClientConsent(consent: ConsentRecord): void {
@@ -34,9 +56,12 @@ export interface PitchIqRepository {
   recordConsent(userId: string, consent: ConsentRecord): Promise<void>;
   listGroupMembers(groupId: string): Promise<GroupMemberStat[]>;
   subscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void;
+  createGroupInvite(groupId: string): Promise<{ code: string; url: string }>;
+  joinGroupByInvite(code: string): Promise<JoinResult>;
 }
 
 export const DEMO_GROUP_ID = 'demo-group-sunday-league';
+export const DEMO_INVITE_CODE = 'DEMSQUAD23';
 export const DEMO_USER_ID = 'demo-you';
 const DAY_MS = 86_400_000;
 
@@ -119,6 +144,17 @@ export class DemoRepository implements PitchIqRepository {
     return () => {
       this.listeners.delete(entry);
     };
+  }
+
+  async createGroupInvite(groupId: string): Promise<{ code: string; url: string }> {
+    if (groupId !== DEMO_GROUP_ID) throw new Error('createGroupInvite failed: not_a_member');
+    return { code: DEMO_INVITE_CODE, url: buildInviteUrl(DEMO_INVITE_CODE) };
+  }
+
+  async joinGroupByInvite(code: string): Promise<JoinResult> {
+    return code.trim().toUpperCase() === DEMO_INVITE_CODE
+      ? { ok: true, groupId: DEMO_GROUP_ID }
+      : { ok: false, reason: 'invite_invalid' };
   }
 }
 
@@ -254,6 +290,27 @@ export class SupabaseRepository implements PitchIqRepository {
       closed = true;
       void this.client.removeChannel(channel);
     };
+  }
+
+  async createGroupInvite(groupId: string): Promise<{ code: string; url: string }> {
+    const { data, error } = await this.client.rpc('create_group_invite', { p_group_id: groupId });
+    if (error) throw new Error(`createGroupInvite failed: ${error.message}`);
+    if (typeof data !== 'string' || !INVITE_CODE_RE.test(data)) {
+      throw new Error('createGroupInvite failed: malformed code');
+    }
+    return { code: data, url: buildInviteUrl(data) };
+  }
+
+  async joinGroupByInvite(code: string): Promise<JoinResult> {
+    try {
+      const { data, error } = await this.client.rpc('join_group_by_invite', { p_code: code });
+      if (error) return { ok: false, reason: mapJoinError(String(error.message ?? '')) };
+      if (typeof data !== 'string' || data.length === 0)
+        return { ok: false, reason: 'invite_invalid' };
+      return { ok: true, groupId: data };
+    } catch {
+      return { ok: false, reason: 'offline' };
+    }
   }
 }
 

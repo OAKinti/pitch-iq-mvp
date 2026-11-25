@@ -9,8 +9,14 @@ import { DEMO_USER_ID, type AuthService, type PitchIqRepository } from '../../se
 import { createLocalProfileStore, createMemoryStorage } from '../../services/persist/localProfile';
 import { createVoiceCoach } from '../../services/voice/voiceCoach';
 import type { VoiceCoach } from '../../services';
-import type { ProfileInput } from '../../services/supabase/repository';
-import type { ConsentRecord, Debrief, DrillResult, GroupMemberStat, OvrResult } from '../../types/contracts';
+import type { JoinResult, ProfileInput } from '../../services/supabase/repository';
+import type {
+  ConsentRecord,
+  Debrief,
+  DrillResult,
+  GroupMemberStat,
+  OvrResult,
+} from '../../types/contracts';
 import { CAMERA_CONSENT, fixedNow, simulateResult } from './helpers';
 
 const FAKE_CLIENT = { fake: true } as unknown as SupabaseClient;
@@ -39,10 +45,19 @@ const LIVE_CONFIG = { demoMode: false, supabaseUrl: 'https://x.supabase.co', sup
 function fakeRepo(): jest.Mocked<PitchIqRepository> {
   return {
     saveProfile: jest.fn<Promise<void>, [string, ProfileInput]>(async () => undefined),
-    saveDrillResult: jest.fn<Promise<void>, [string, DrillResult, OvrResult]>(async () => undefined),
+    saveDrillResult: jest.fn<Promise<void>, [string, DrillResult, OvrResult]>(
+      async () => undefined,
+    ),
     recordConsent: jest.fn<Promise<void>, [string, ConsentRecord]>(async () => undefined),
     listGroupMembers: jest.fn<Promise<GroupMemberStat[]>, [string]>(async () => []),
-    subscribeToGroup: jest.fn<() => void, [string, (m: GroupMemberStat[]) => void]>(() => () => undefined),
+    subscribeToGroup: jest.fn<() => void, [string, (m: GroupMemberStat[]) => void]>(
+      () => () => undefined,
+    ),
+    createGroupInvite: jest.fn<Promise<{ code: string; url: string }>, [string]>(async () => ({
+      code: 'ABCDEFGHJK',
+      url: 'pitchiq://join/ABCDEFGHJK',
+    })),
+    joinGroupByInvite: jest.fn<Promise<JoinResult>, [string]>(async () => ({ ok: true as const, groupId: 'g' })),
   };
 }
 

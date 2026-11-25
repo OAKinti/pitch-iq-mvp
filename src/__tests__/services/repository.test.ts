@@ -400,3 +400,66 @@ describe('SupabaseRepository identity and profile writes (S2)', () => {
     await expect(new DemoRepository().saveProfile('u', profile)).resolves.toBeUndefined();
   });
 });
+
+describe('invite links (repository)', () => {
+  const rpcClient = (impl: (fn: string, args: unknown) => unknown) =>
+    ({ rpc: jest.fn(async (fn: string, args: unknown) => impl(fn, args)) }) as unknown as SupabaseClient;
+
+  it('INV-3 demo repository: creates and joins the demo invite, rejects others', async () => {
+    const repo = new DemoRepository();
+    const { code, url } = await repo.createGroupInvite(DEMO_GROUP_ID);
+    expect(url).toBe(`pitchiq://join/${code}`);
+    expect(await repo.joinGroupByInvite(` ${code.toLowerCase()} `)).toEqual({
+      ok: true,
+      groupId: DEMO_GROUP_ID,
+    });
+    expect(await repo.joinGroupByInvite('ZZZZZZZZZZ')).toEqual({ ok: false, reason: 'invite_invalid' });
+    await expect(repo.createGroupInvite('other')).rejects.toThrow('not_a_member');
+  });
+
+  it('INV-3 supabase: create calls the RPC and builds the url', async () => {
+    const client = rpcClient(() => ({ data: 'ABCDEFGHJK', error: null }));
+    const out = await new SupabaseRepository(client).createGroupInvite('g1');
+    expect(out).toEqual({ code: 'ABCDEFGHJK', url: 'pitchiq://join/ABCDEFGHJK' });
+    expect(client.rpc).toHaveBeenCalledWith('create_group_invite', { p_group_id: 'g1' });
+  });
+
+  it('INV-3 supabase: create rejects on RPC error or malformed code', async () => {
+    await expect(
+      new SupabaseRepository(rpcClient(() => ({ data: null, error: { message: 'not_a_member' } }))).createGroupInvite('g'),
+    ).rejects.toThrow('not_a_member');
+    await expect(
+      new SupabaseRepository(rpcClient(() => ({ data: 'bad', error: null }))).createGroupInvite('g'),
+    ).rejects.toThrow('malformed');
+  });
+
+  it('INV-3 supabase: join success returns the group id', async () => {
+    const client = rpcClient(() => ({ data: 'group-uuid', error: null }));
+    expect(await new SupabaseRepository(client).joinGroupByInvite('ABCDEFGHJK')).toEqual({
+      ok: true,
+      groupId: 'group-uuid',
+    });
+    expect(client.rpc).toHaveBeenCalledWith('join_group_by_invite', { p_code: 'ABCDEFGHJK' });
+  });
+
+  it.each([
+    ['not_authenticated', 'not_authenticated'],
+    ['profile_required', 'profile_required'],
+    ['parental_consent_required', 'parental_consent_required'],
+    ['invite_invalid', 'invite_invalid'],
+    ['connection reset', 'offline'],
+  ])('INV-3 supabase: error %s maps to %s', async (message, reason) => {
+    const repo = new SupabaseRepository(rpcClient(() => ({ data: null, error: { message } })));
+    expect(await repo.joinGroupByInvite('ABCDEFGHJK')).toEqual({ ok: false, reason });
+  });
+
+  it('INV-3 supabase: empty data is invalid; a thrown RPC is offline', async () => {
+    expect(
+      await new SupabaseRepository(rpcClient(() => ({ data: null, error: null }))).joinGroupByInvite('X'),
+    ).toEqual({ ok: false, reason: 'invite_invalid' });
+    const boom = rpcClient(() => {
+      throw new Error('network');
+    });
+    expect(await new SupabaseRepository(boom).joinGroupByInvite('X')).toEqual({ ok: false, reason: 'offline' });
+  });
+});

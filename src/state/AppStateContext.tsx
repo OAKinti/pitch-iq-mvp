@@ -47,8 +47,18 @@ import {
   type VoiceCoach,
 } from '../services';
 import { createLocalProfileStore, type LocalProfileStore } from '../services/persist/localProfile';
+import { DEMO_GROUP_ID } from '../services/supabase/repository';
+import { joinNoticeText, type JoinNoticeReason } from '../services/invites/inviteLink';
 
 const DEFAULT_DISPLAY_NAME = 'Player';
+
+/** Result of the last squad-join attempt; `seq` changes on every attempt so the UI can react once. */
+export interface JoinNotice {
+  seq: number;
+  ok: boolean;
+  reason: JoinNoticeReason;
+  text: string;
+}
 
 export interface AppState {
   ageBracket: AgeBracket | null;
@@ -78,6 +88,13 @@ export interface AppState {
   hydrated: boolean;
   /** True when the age bracket was persisted by an earlier run: the age gate cannot be retried. */
   ageLocked: boolean;
+  /** Invite code received before onboarding finished; joined automatically afterwards. */
+  pendingInvite: string | null;
+  joinNotice: JoinNotice | null;
+  /** The squad shown on the Group screen (the demo squad until an invite joins another). */
+  groupId: string;
+  /** Accepts a validated invite code: joins now, or after onboarding + session. */
+  joinFromInvite: (code: string) => void;
   hasConsent: (type: ConsentType) => boolean;
   setAge: (bracket: AgeBracket) => void;
   grantConsent: (type: ConsentType) => void;
@@ -145,6 +162,10 @@ export function AppStateProvider({
   const [userId, setUserId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [ageLocked, setAgeLocked] = useState(false);
+  const [pendingInvite, setPendingInvite] = useState<string | null>(null);
+  const [joinNotice, setJoinNotice] = useState<JoinNotice | null>(null);
+  const [groupId, setGroupId] = useState(DEMO_GROUP_ID);
+  const joinSeq = useRef(0);
   const debriefToken = useRef(0);
   const retrySession = useRef<() => void>(() => undefined);
 
@@ -333,6 +354,32 @@ export function AppStateProvider({
     [localProfile, syncProfile],
   );
 
+  // ---- Invite join (D-9B): the link is held until onboarding is done; the join then rides the same
+  // serial queue, so it runs after the profile row and a session exist.
+  const onboarded =
+    ageBracket !== null && consents.some((c) => c.type === 'camera_skeletal_tracking');
+
+  const joinFromInvite = useCallback((code: string) => setPendingInvite(code), []);
+
+  useEffect(() => {
+    if (!pendingInvite || !onboarded) return;
+    const code = pendingInvite;
+    setPendingInvite(null);
+    enqueue('invite-join', async () => {
+      let notice: JoinNotice;
+      const seq = ++joinSeq.current;
+      try {
+        const res = await repository.joinGroupByInvite(code);
+        const reason: JoinNoticeReason = res.ok ? 'joined' : res.reason;
+        if (res.ok && mounted.current) setGroupId(res.groupId);
+        notice = { seq, ok: res.ok, reason, text: joinNoticeText(reason) };
+      } catch {
+        notice = { seq, ok: false, reason: 'offline', text: joinNoticeText('offline') };
+      }
+      if (mounted.current) setJoinNotice(notice);
+    });
+  }, [pendingInvite, onboarded, enqueue, repository]);
+
   const setPersona = useCallback((p: CoachPersona) => setPersonaState(p), []);
   const setPosition = useCallback((p: PlayerPosition) => setPositionState(p), []);
 
@@ -413,6 +460,10 @@ export function AppStateProvider({
       userId,
       hydrated,
       ageLocked,
+      pendingInvite,
+      joinNotice,
+      groupId,
+      joinFromInvite,
       hasConsent: (type) => consents.some((c) => c.type === type),
       setAge,
       grantConsent,
@@ -440,6 +491,10 @@ export function AppStateProvider({
       userId,
       hydrated,
       ageLocked,
+      pendingInvite,
+      joinNotice,
+      groupId,
+      joinFromInvite,
       setAge,
       grantConsent,
       setPersona,
