@@ -267,7 +267,8 @@ describe('AppStateProvider COPPA and persistence', () => {
     await mount({ config: LIVE_CONFIG, repository: fakeRepo(), auth: fakeAuth('uid-1') });
     await flush();
     const lastTransport = () => createVoiceCoachMock.mock.calls.at(-1)?.[0].transport;
-    expect(lastTransport()).not.toBeNull();
+    // Fail closed: no transport while the age is still unknown.
+    expect(lastTransport()).toBeNull();
 
     await act(async () => app.setAge('under_13'));
     expect(lastTransport()).toBeNull();

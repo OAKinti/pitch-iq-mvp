@@ -91,6 +91,11 @@ begin
   if v_uid is null then
     raise exception 'not_authenticated' using errcode = '28000';
   end if;
+  -- An unverified under-13 cannot hand out invites either (D-9C), even by calling the RPC directly.
+  if exists (select 1 from public.profiles p where p.id = v_uid
+               and p.age_bracket = 'under_13' and p.parental_consent_verified_at is null) then
+    raise exception 'parental_consent_required' using errcode = '42501';
+  end if;
   if not exists (select 1 from public.group_members m where m.group_id = p_group_id and m.user_id = v_uid) then
     raise exception 'not_a_member' using errcode = '42501';
   end if;

@@ -174,7 +174,8 @@ export function AppStateProvider({
     const client = getSupabaseClient(config);
     // COPPA-1 / D-9C: an under-13 player is never sent to Tier 2 until a parent is verified. Verification
     // is server-side only (service_role), so on the client every under-13 profile is unverified.
-    const tier2Allowed = !(ageBracket && requiresParentalConsent(ageBracket));
+    // Fail closed: Tier 2 only once the age is known and no parental consent is required (D-9C).
+    const tier2Allowed = ageBracket !== null && !requiresParentalConsent(ageBracket);
     return createVoiceCoach({
       persona,
       transport: client && tier2Allowed ? createEdgeFunctionTransport(client) : null,

@@ -22,7 +22,9 @@ function activeDaysInWindow(member: GroupMemberStat, now: Date): number {
 }
 
 export function GroupSessionScreen() {
-  const { repository, now, groupId, requiresParent, joinNotice } = useAppState();
+  const { repository, now, groupId, requiresParent, joinNotice, userId } = useAppState();
+  // The signed-in user (anonymous auth, D-9A); Demo Mode resolves to the demo id.
+  const meId = userId ?? DEMO_USER_ID;
   const [members, setMembers] = useState<GroupMemberStat[]>([]);
   const [inviteError, setInviteError] = useState(false);
 
@@ -62,7 +64,7 @@ export function GroupSessionScreen() {
   const performer = members.find((m) => m.userId === crowns.performance);
   const consistent = members.find((m) => m.userId === crowns.consistency);
 
-  const myIndex = ranked.findIndex((m) => m.userId === DEMO_USER_ID);
+  const myIndex = ranked.findIndex((m) => m.userId === meId);
   const me = ranked[myIndex];
   const rival = myIndex > 0 ? ranked[myIndex - 1] : ranked[myIndex + 1];
   const rivalry = me && rival ? computeRivalry(me, rival) : null;
@@ -135,9 +137,9 @@ export function GroupSessionScreen() {
           <View
             key={m.userId}
             testID={`leaderboard-row-${m.userId}`}
-            style={[styles.row, m.userId === DEMO_USER_ID && styles.rowMe]}
+            style={[styles.row, m.userId === meId && styles.rowMe]}
           >
-            <Text style={[styles.rank, m.userId === DEMO_USER_ID && styles.rankMe]}>{i + 1}</Text>
+            <Text style={[styles.rank, m.userId === meId && styles.rankMe]}>{i + 1}</Text>
             <Text style={styles.name}>{m.displayName}</Text>
             <Text style={styles.score}>{m.bestOvr.toFixed(1)}</Text>
           </View>

@@ -88,6 +88,31 @@ test('an under-13 without verifiable parental consent cannot join; a verified on
   assert.equal(await join(kidVerified, code), groupId);
 });
 
+test('an unverified under-13 cannot create invites, even for a squad they own (direct RPC call)', async () => {
+  const kidGroup = uuid(810);
+  await asCommit(db, 'authenticated', kid, (t) =>
+    t.query(`insert into public.groups (id, owner_id, name) values ($1, $2, 'Kid squad')`, [
+      kidGroup,
+      kid,
+    ]),
+  );
+  const msg = await failure(
+    asCommit(db, 'authenticated', kid, (t) =>
+      t.query('select public.create_group_invite($1)', [kidGroup]),
+    ),
+  );
+  assert.match(msg ?? '', /parental_consent_required/);
+  const n = await db.query('select count(*)::int n from public.group_invites where group_id = $1', [
+    kidGroup,
+  ]);
+  assert.equal(n.rows[0].n, 0);
+  // a parent-verified minor who is a member may invite
+  const code = await asCommit(db, 'authenticated', kidVerified, (t) =>
+    t.query('select public.create_group_invite($1) as code', [groupId]),
+  );
+  assert.match(code.rows[0].code, /^[A-HJ-NP-Z2-9]{10}$/);
+});
+
 test('clients cannot write invites directly or read other groups’ invites', async () => {
   assert.ok(
     await failure(
