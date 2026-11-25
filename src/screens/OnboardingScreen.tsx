@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { HudButton, HudPanel, OptionChip, ScreenFrame, SectionLabel } from '../components';
 import { useNavigation } from '../navigation/NavigationContext';
@@ -28,6 +28,12 @@ export function OnboardingScreen() {
   const [month, setMonth] = useState('');
   const [agreed, setAgreed] = useState(false);
 
+  // AUTH-4: once an age bracket is persisted the age step is locked and skipped on every later launch.
+  useEffect(() => {
+    if (!app.ageLocked) return;
+    setStep((s) => (s !== 'age' ? s : app.hasConsent('camera_skeletal_tracking') ? 'profile' : 'consent'));
+  }, [app]);
+
   const bracket = classifyAge(Number(year), Number(month), app.now());
   const parent = app.requiresParent;
 
@@ -52,7 +58,7 @@ export function OnboardingScreen() {
       kicker={`Setup · step ${stepNumber} of 3`}
       title={step === 'age' ? 'Who is training?' : step === 'consent' ? 'Motion tracking release' : 'Pick your coach'}
     >
-      {step === 'age' && (
+      {step === 'age' && app.hydrated && (
         <HudPanel title="Birth date">
           <Text style={styles.body}>
             Enter the birth month and year of the person who will train. We use it only to set up the right account

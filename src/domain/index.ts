@@ -4,3 +4,4 @@ export * from './rating';
 export * from './session';
 export * from './highlights/peakStreak';
 export * from './mock/mockPoseGenerator';
+export * from './pose/skeleton';

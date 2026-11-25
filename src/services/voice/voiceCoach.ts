@@ -1,7 +1,7 @@
 import type { CachedCue, CoachPersona, CueId, Debrief } from '../../types/contracts';
 import { getCachedCue } from './cueLibrary';
 import { DEBRIEF_MAX_CHARS, estimateDebriefCostUsd } from './costModel';
-import { buildDebriefPrompt, templateDebrief, truncateAtWord, type DebriefInput } from './debriefPrompt';
+import { buildDebriefRequest, templateDebrief, truncateAtWord, type DebriefInput } from './debriefPrompt';
 import { createQaBudget, type QaBudget } from './qaBudget';
 import type { DebriefTransport } from './transport';
 
@@ -33,8 +33,7 @@ export function createVoiceCoach(opts: {
       const scoped: DebriefInput = { ...input, persona };
       if (!transport) return fromTemplate(scoped);
       try {
-        const prompt = buildDebriefPrompt(scoped);
-        const res = await transport.requestDebrief(prompt, persona);
+        const res = await transport.requestDebrief(buildDebriefRequest(scoped));
         const text = truncateAtWord(res.text, DEBRIEF_MAX_CHARS);
         if (text.length === 0) return fromTemplate(scoped);
         return {

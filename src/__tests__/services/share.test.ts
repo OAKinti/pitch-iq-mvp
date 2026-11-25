@@ -100,7 +100,7 @@ describe('barrel', () => {
   it('exports the contract surface', () => {
     for (const k of [
       'getAppConfig', 'getSupabaseClient', 'createRepository', 'DEMO_GROUP_ID', 'PERSONAS', 'getCachedCue',
-      'DEBRIEF_MAX_CHARS', 'TTS_USD_PER_1K_CHARS', 'HAIKU_MODEL_ID', 'estimateDebriefCostUsd', 'buildDebriefPrompt',
+      'DEBRIEF_MAX_CHARS', 'TTS_USD_PER_1K_CHARS', 'HAIKU_MODEL_ID', 'estimateDebriefCostUsd', 'buildDebriefRequest', 'DEBRIEF_TIMEOUT_MS',
       'templateDebrief', 'createEdgeFunctionTransport', 'createQaBudget', 'createVoiceCoach',
       'createHealthKitAdapter', 'createHealthConnectAdapter', 'createWhoopAdapter', 'mapWhoopRecovery',
       'assertAiSafeSources', 'createStravaExportAdapter', 'buildStravaActivityPayload',

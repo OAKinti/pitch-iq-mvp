@@ -1,0 +1,37 @@
+# Squad invite: a join link received after onboarding routes to the Group screen with a result notice,
+# then the member creates an invite of their own (opens the OS share sheet).
+appId: com.pitchiq.mvp
+name: PitchIQ squad invite
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: screen-onboarding
+- tapOn:
+    id: age-year-input
+- inputText: "1995"
+- tapOn:
+    id: age-month-input
+- inputText: "6"
+- hideKeyboard
+- tapOn:
+    id: age-continue
+- tapOn:
+    id: consent-checkbox
+- tapOn:
+    id: consent-accept
+- tapOn:
+    id: persona-option-captain
+- tapOn:
+    id: position-option-MID
+- tapOn:
+    id: onboarding-finish
+- assertVisible:
+    id: screen-combine
+- openLink: pitchiq://join/DEMSQUAD23
+- assertVisible:
+    id: screen-group
+- assertVisible:
+    id: group-join-notice
+- tapOn:
+    id: group-invite-create

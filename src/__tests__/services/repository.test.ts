@@ -43,7 +43,9 @@ describe('DemoRepository', () => {
     expect(you.bestOvr).toBe(72.5);
     expect(you.activeDays).toEqual(['2026-11-22']);
     await repo.saveDrillResult('u', ballResult, { ...ovr, ovr: 60 });
-    const you2 = (await repo.listGroupMembers(DEMO_GROUP_ID)).find((m) => m.userId === DEMO_USER_ID);
+    const you2 = (await repo.listGroupMembers(DEMO_GROUP_ID)).find(
+      (m) => m.userId === DEMO_USER_ID,
+    );
     expect(you2?.bestOvr).toBe(72.5);
     expect(you2?.activeDays).toHaveLength(1);
     off();
@@ -53,7 +55,11 @@ describe('DemoRepository', () => {
 
   it('recordConsent resolves', async () => {
     await expect(
-      new DemoRepository().recordConsent('u', { type: 'voice_coach', policyVersion: 'v', grantedAt: 'x' }),
+      new DemoRepository().recordConsent('u', {
+        type: 'voice_coach',
+        policyVersion: 'v',
+        grantedAt: 'x',
+      }),
     ).resolves.toBeUndefined();
   });
 });
@@ -99,10 +105,17 @@ describe('SupabaseRepository (fake client)', () => {
     const f = fakeClient({ responses: {} });
     const repo = new SupabaseRepository(f.client);
     await repo.saveDrillResult('u1', ballResult, ovr);
-    await repo.recordConsent('u1', { type: 'camera_skeletal_tracking', policyVersion: '2026-11-22', grantedAt: 't' });
+    await repo.recordConsent('u1', {
+      type: 'camera_skeletal_tracking',
+      policyVersion: '2026-11-22',
+      grantedAt: 't',
+    });
     expect(f.calls[0]).toMatchObject({ table: 'drill_sessions', op: 'insert' });
     expect((f.calls[0]?.arg as Record<string, unknown>).ovr).toBe(72.5);
-    expect(f.calls[1]).toMatchObject({ table: 'consents', arg: { consent_type: 'camera_skeletal_tracking' } });
+    expect(f.calls[1]).toMatchObject({
+      table: 'consents',
+      arg: { consent_type: 'camera_skeletal_tracking' },
+    });
   });
 
   it('throws on insert errors', async () => {
@@ -114,7 +127,9 @@ describe('SupabaseRepository (fake client)', () => {
     });
     const repo = new SupabaseRepository(f.client);
     await expect(repo.saveDrillResult('u', ballResult, ovr)).rejects.toThrow('boom');
-    await expect(repo.recordConsent('u', { type: 'voice_coach', policyVersion: 'v', grantedAt: 't' })).rejects.toThrow('nope');
+    await expect(
+      repo.recordConsent('u', { type: 'voice_coach', policyVersion: 'v', grantedAt: 't' }),
+    ).rejects.toThrow('nope');
   });
 
   const okResponses: Record<string, Resp> = {
@@ -193,6 +208,35 @@ describe('SupabaseRepository (fake client)', () => {
     expect(f.removeChannel).toHaveBeenCalled();
   });
 
+  it('refetches on every SUBSCRIBED and stops after unsubscribe', async () => {
+    const f = fakeClient({ responses: okResponses });
+    const repo = new SupabaseRepository(f.client);
+    const onChange = jest.fn();
+    const off = repo.subscribeToGroup('g', onChange);
+    const statusCb = f.channel.subscribe.mock.calls[0][0] as (s: string) => void;
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    statusCb('SUBSCRIBED');
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    statusCb('CHANNEL_ERROR');
+    statusCb('TIMED_OUT');
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    statusCb('SUBSCRIBED');
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(2);
+    // Late fetch after unsubscribe stays silent.
+    statusCb('SUBSCRIBED');
+    off();
+    off();
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(2);
+    statusCb('SUBSCRIBED');
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(f.removeChannel).toHaveBeenCalledTimes(1);
+  });
+
   it('swallows refresh errors in the subscription', async () => {
     const f = fakeClient({ responses: { group_members: { data: null, error: { message: 'x' } } } });
     const onChange = jest.fn();
@@ -212,8 +256,16 @@ describe('createRepository / getSupabaseClient', () => {
   });
 
   it('returns null client in demo mode and a singleton otherwise', () => {
-    expect(getSupabaseClient({ demoMode: true, supabaseUrl: 'https://a.supabase.co', supabaseAnonKey: 'k' })).toBeNull();
-    expect(getSupabaseClient({ demoMode: false, supabaseUrl: null, supabaseAnonKey: null })).toBeNull();
+    expect(
+      getSupabaseClient({
+        demoMode: true,
+        supabaseUrl: 'https://a.supabase.co',
+        supabaseAnonKey: 'k',
+      }),
+    ).toBeNull();
+    expect(
+      getSupabaseClient({ demoMode: false, supabaseUrl: null, supabaseAnonKey: null }),
+    ).toBeNull();
     const cfg = { demoMode: false, supabaseUrl: 'https://a.supabase.co', supabaseAnonKey: 'k' };
     const c1 = getSupabaseClient(cfg);
     expect(c1).not.toBeNull();
@@ -222,10 +274,192 @@ describe('createRepository / getSupabaseClient', () => {
   });
 
   it('returns SupabaseRepository when a client exists', () => {
-    const repo = createRepository(
-      { demoMode: false, supabaseUrl: 'https://a.supabase.co', supabaseAnonKey: 'k' },
-    );
+    const repo = createRepository({
+      demoMode: false,
+      supabaseUrl: 'https://a.supabase.co',
+      supabaseAnonKey: 'k',
+    });
     expect(repo).toBeInstanceOf(SupabaseRepository);
-    expect(createRepository({ demoMode: true, supabaseUrl: null, supabaseAnonKey: null }, { client: fakeClient({ responses: {} }).client })).toBeInstanceOf(SupabaseRepository);
+    expect(
+      createRepository(
+        { demoMode: true, supabaseUrl: null, supabaseAnonKey: null },
+        { client: fakeClient({ responses: {} }).client },
+      ),
+    ).toBeInstanceOf(SupabaseRepository);
+  });
+});
+
+describe('SupabaseRepository identity and profile writes (S2)', () => {
+  type Err = { message: string; code?: string } | null;
+  type Call = { table: string; op: string; arg?: unknown; eq?: unknown };
+  function recordingClient(errors: { insert?: Err; update?: Err } = {}) {
+    const calls: Call[] = [];
+    const client = {
+      from: (table: string) => ({
+        insert: (row: unknown) => {
+          calls.push({ table, op: 'insert', arg: row });
+          return Promise.resolve({ data: null, error: errors.insert ?? null });
+        },
+        update: (row: unknown) => {
+          const call: Call = { table, op: 'update', arg: row };
+          calls.push(call);
+          return {
+            eq: (col: string, val: unknown) => {
+              call.eq = [col, val];
+              return Promise.resolve({ data: null, error: errors.update ?? null });
+            },
+          };
+        },
+      }),
+    } as unknown as SupabaseClient;
+    return { client, calls };
+  }
+  const profile = {
+    displayName: 'Player',
+    ageBracket: 'teen_13_17',
+    position: 'MID',
+    persona: 'captain',
+  } as const;
+  const consent = { type: 'camera_skeletal_tracking', policyVersion: 'v', grantedAt: 't' } as const;
+
+  it('AUTH-2: demo user id is never sent to Supabase', async () => {
+    const f = recordingClient();
+    const repo = new SupabaseRepository(f.client);
+    await expect(repo.saveProfile(DEMO_USER_ID, profile)).rejects.toThrow('demo user id');
+    await expect(repo.saveDrillResult(DEMO_USER_ID, ballResult, ovr)).rejects.toThrow(
+      'demo user id',
+    );
+    await expect(repo.recordConsent(DEMO_USER_ID, consent)).rejects.toThrow('demo user id');
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('AUTH-2: writes carry the session user id', async () => {
+    const f = recordingClient();
+    const repo = new SupabaseRepository(f.client);
+    await repo.saveProfile('uid-1', profile);
+    await repo.saveDrillResult('uid-1', ballResult, ovr);
+    await repo.recordConsent('uid-1', consent);
+    expect(f.calls[0]).toMatchObject({
+      table: 'profiles',
+      op: 'insert',
+      arg: { id: 'uid-1', age_bracket: 'teen_13_17', persona: 'captain', position: 'MID' },
+    });
+    expect(f.calls[1]?.arg).toMatchObject({ user_id: 'uid-1' });
+    expect(f.calls[2]?.arg).toMatchObject({ user_id: 'uid-1' });
+  });
+
+  it('saveProfile on an existing row updates editable columns only (never age_bracket)', async () => {
+    const f = recordingClient({ insert: { message: 'dup', code: '23505' } });
+    await new SupabaseRepository(f.client).saveProfile('uid-1', { ...profile, persona: 'hype' });
+    const update = f.calls.find((c) => c.op === 'update');
+    expect(update?.eq).toEqual(['id', 'uid-1']);
+    expect(Object.keys(update?.arg as object).sort()).toEqual([
+      'display_name',
+      'persona',
+      'position',
+      'updated_at',
+    ]);
+    expect(update?.arg).toMatchObject({ persona: 'hype' });
+  });
+
+  it('saveProfile surfaces insert and update failures', async () => {
+    await expect(
+      new SupabaseRepository(recordingClient({ insert: { message: 'rls' } }).client).saveProfile(
+        'u',
+        profile,
+      ),
+    ).rejects.toThrow('saveProfile failed: rls');
+    await expect(
+      new SupabaseRepository(
+        recordingClient({
+          insert: { message: 'dup', code: '23505' },
+          update: { message: 'denied' },
+        }).client,
+      ).saveProfile('u', profile),
+    ).rejects.toThrow('saveProfile failed: denied');
+  });
+
+  it('recordConsent treats an already-recorded consent (unique violation) as success', async () => {
+    const f = recordingClient({ insert: { message: 'dup', code: '23505' } });
+    await expect(
+      new SupabaseRepository(f.client).recordConsent('uid-1', consent),
+    ).resolves.toBeUndefined();
+  });
+
+  it('AUTH-5: parental_verified is refused client-side without calling the server', async () => {
+    const f = recordingClient();
+    const pv = { type: 'parental_verified', policyVersion: 'v', grantedAt: 't' } as const;
+    await expect(new SupabaseRepository(f.client).recordConsent('uid-1', pv)).rejects.toThrow(
+      'parental_verified',
+    );
+    await expect(new DemoRepository().recordConsent('u', pv)).rejects.toThrow('parental_verified');
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('DemoRepository.saveProfile resolves', async () => {
+    await expect(new DemoRepository().saveProfile('u', profile)).resolves.toBeUndefined();
+  });
+});
+
+describe('invite links (repository)', () => {
+  const rpcClient = (impl: (fn: string, args: unknown) => unknown) =>
+    ({ rpc: jest.fn(async (fn: string, args: unknown) => impl(fn, args)) }) as unknown as SupabaseClient;
+
+  it('INV-3 demo repository: creates and joins the demo invite, rejects others', async () => {
+    const repo = new DemoRepository();
+    const { code, url } = await repo.createGroupInvite(DEMO_GROUP_ID);
+    expect(url).toBe(`pitchiq://join/${code}`);
+    expect(await repo.joinGroupByInvite(` ${code.toLowerCase()} `)).toEqual({
+      ok: true,
+      groupId: DEMO_GROUP_ID,
+    });
+    expect(await repo.joinGroupByInvite('ZZZZZZZZZZ')).toEqual({ ok: false, reason: 'invite_invalid' });
+    await expect(repo.createGroupInvite('other')).rejects.toThrow('not_a_member');
+  });
+
+  it('INV-3 supabase: create calls the RPC and builds the url', async () => {
+    const client = rpcClient(() => ({ data: 'ABCDEFGHJK', error: null }));
+    const out = await new SupabaseRepository(client).createGroupInvite('g1');
+    expect(out).toEqual({ code: 'ABCDEFGHJK', url: 'pitchiq://join/ABCDEFGHJK' });
+    expect(client.rpc).toHaveBeenCalledWith('create_group_invite', { p_group_id: 'g1' });
+  });
+
+  it('INV-3 supabase: create rejects on RPC error or malformed code', async () => {
+    await expect(
+      new SupabaseRepository(rpcClient(() => ({ data: null, error: { message: 'not_a_member' } }))).createGroupInvite('g'),
+    ).rejects.toThrow('not_a_member');
+    await expect(
+      new SupabaseRepository(rpcClient(() => ({ data: 'bad', error: null }))).createGroupInvite('g'),
+    ).rejects.toThrow('malformed');
+  });
+
+  it('INV-3 supabase: join success returns the group id', async () => {
+    const client = rpcClient(() => ({ data: 'group-uuid', error: null }));
+    expect(await new SupabaseRepository(client).joinGroupByInvite('ABCDEFGHJK')).toEqual({
+      ok: true,
+      groupId: 'group-uuid',
+    });
+    expect(client.rpc).toHaveBeenCalledWith('join_group_by_invite', { p_code: 'ABCDEFGHJK' });
+  });
+
+  it.each([
+    ['not_authenticated', 'not_authenticated'],
+    ['profile_required', 'profile_required'],
+    ['parental_consent_required', 'parental_consent_required'],
+    ['invite_invalid', 'invite_invalid'],
+    ['connection reset', 'offline'],
+  ])('INV-3 supabase: error %s maps to %s', async (message, reason) => {
+    const repo = new SupabaseRepository(rpcClient(() => ({ data: null, error: { message } })));
+    expect(await repo.joinGroupByInvite('ABCDEFGHJK')).toEqual({ ok: false, reason });
+  });
+
+  it('INV-3 supabase: empty data is invalid; a thrown RPC is offline', async () => {
+    expect(
+      await new SupabaseRepository(rpcClient(() => ({ data: null, error: null }))).joinGroupByInvite('X'),
+    ).toEqual({ ok: false, reason: 'invite_invalid' });
+    const boom = rpcClient(() => {
+      throw new Error('network');
+    });
+    expect(await new SupabaseRepository(boom).joinGroupByInvite('X')).toEqual({ ok: false, reason: 'offline' });
   });
 });

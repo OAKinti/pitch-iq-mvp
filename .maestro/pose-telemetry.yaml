@@ -1,0 +1,41 @@
+# Pose telemetry: simulated Ball Mastery drill shows the skeleton overlay, fps and pose source.
+appId: com.pitchiq.mvp
+name: PitchIQ pose telemetry
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: screen-onboarding
+- tapOn:
+    id: age-year-input
+- inputText: "2004"
+- tapOn:
+    id: age-month-input
+- inputText: "6"
+- hideKeyboard
+- tapOn:
+    id: age-continue
+- tapOn:
+    id: consent-checkbox
+- tapOn:
+    id: consent-accept
+- tapOn:
+    id: persona-option-captain
+- tapOn:
+    id: position-option-MID
+- tapOn:
+    id: onboarding-finish
+- assertVisible:
+    id: screen-combine
+- tapOn:
+    id: drill-option-ball_mastery
+- tapOn:
+    id: simulate-toggle
+- tapOn:
+    id: drill-start
+- assertVisible:
+    id: skeleton-overlay
+- assertVisible:
+    id: telemetry-fps
+- assertVisible:
+    id: pose-source

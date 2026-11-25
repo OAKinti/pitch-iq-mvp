@@ -1,14 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  TARGET_FPS,
   type CueId,
   type DrillEngine,
   type DrillResult,
   type DrillSnapshot,
   type DrillType,
   type PoseFrame,
+  type PoseSource,
 } from '../types/contracts';
-import { createDrillEngine, createMockPoseStream, type MockPoseStream } from '../domain';
+import { createDrillEngine } from '../domain';
+import {
+  createFpsMeter,
+  isMediapipeAvailable,
+  selectPoseSource,
+  type FpsMeter,
+  type PoseSourceError,
+  type PoseSourceProvider,
+  type PoseSourceUnavailableReason,
+} from '../services/cv';
+
+export interface DrillRunnerOptions {
+  simulate: boolean;
+  consentGranted: boolean;
+  liveAllowed: boolean;
+  seed?: number;
+  /** Defaults to isMediapipeAvailable(). */
+  nativeAvailable?: boolean;
+  /** Called synchronously for every new snapshot cue (Tier 1 playback; never batched away). */
+  onCue?: (cue: CueId) => void;
+}
 
 export interface DrillRunner {
   snapshot: DrillSnapshot | null;
@@ -16,82 +36,147 @@ export interface DrillRunner {
   latestCue: CueId | null;
   running: boolean;
   result: DrillResult | null;
-  start: () => void;
+  /** Returns false when nothing started; sourceError then says why. */
+  start: () => boolean;
   stop: () => void;
   reset: () => void;
+  readonly sourceKind: PoseSource | null;
+  readonly provider: PoseSourceProvider | null;
+  readonly fps: number;
+  readonly sourceError: PoseSourceError | PoseSourceUnavailableReason | null;
 }
 
-/** Drives a DrillEngine from the mock pose stream. Live camera replaces the stream on the Dev Client build. */
-export function useDrillRunner(drillType: DrillType, seed = 7): DrillRunner {
+/**
+ * Drives a DrillEngine from exactly one PoseSourceProvider per drill (CON-2). Live never falls back
+ * to mock (FAIL-2); native errors stop the provider and surface as sourceError (FAIL-5).
+ */
+export function useDrillRunner(drillType: DrillType, opts: DrillRunnerOptions): DrillRunner {
   const [snapshot, setSnapshot] = useState<DrillSnapshot | null>(null);
   const [latestFrame, setLatestFrame] = useState<PoseFrame | null>(null);
   const [latestCue, setLatestCue] = useState<CueId | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DrillResult | null>(null);
+  const [provider, setProvider] = useState<PoseSourceProvider | null>(null);
+  const [fps, setFps] = useState(0);
+  const [sourceError, setSourceError] = useState<DrillRunner['sourceError']>(null);
 
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const engine = useRef<DrillEngine | null>(null);
-  const stream = useRef<MockPoseStream | null>(null);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const active = useRef<PoseSourceProvider | null>(null);
+  const meter = useRef<FpsMeter | null>(null);
 
-  const clear = useCallback(() => {
-    if (timer.current !== null) {
-      clearInterval(timer.current);
-      timer.current = null;
-    }
+  const teardown = useCallback(() => {
+    const p = active.current;
+    active.current = null;
+    if (p) p.stop();
   }, []);
 
-  useEffect(() => clear, [clear]);
+  useEffect(() => teardown, [teardown]);
 
   const stop = useCallback(() => {
-    clear();
+    teardown();
     setRunning(false);
-  }, [clear]);
+  }, [teardown]);
 
   const reset = useCallback(() => {
-    clear();
-    engine.current = null;
-    stream.current = null;
+    teardown();
     setRunning(false);
     setSnapshot(null);
     setLatestFrame(null);
     setLatestCue(null);
     setResult(null);
-  }, [clear]);
+    setProvider(null);
+    setFps(0);
+    setSourceError(null);
+  }, [teardown]);
 
-  const start = useCallback(() => {
-    clear();
-    const eng = createDrillEngine(drillType);
-    const str = createMockPoseStream({ scenario: drillType, seed });
-    engine.current = eng;
-    stream.current = str;
-    const startedAt = new Date().toISOString();
+  const start = useCallback((): boolean => {
+    teardown();
+    const o = optsRef.current;
+    const selection = selectPoseSource({
+      simulate: o.simulate,
+      consentGranted: o.consentGranted,
+      liveAllowed: o.liveAllowed,
+      nativeAvailable: o.nativeAvailable ?? isMediapipeAvailable(),
+      scenario: drillType,
+      ...(o.seed === undefined ? {} : { seed: o.seed }),
+    });
     setSnapshot(null);
     setLatestFrame(null);
     setLatestCue(null);
     setResult(null);
+    setFps(0);
+    if (!selection.ok) {
+      setProvider(null);
+      setRunning(false);
+      setSourceError(selection.reason);
+      return false;
+    }
+    const src = selection.provider;
+    const eng: DrillEngine = createDrillEngine(drillType);
+    const fpsMeter = createFpsMeter();
+    meter.current = fpsMeter;
+    const startedAt = new Date().toISOString();
+    active.current = src;
+    setProvider(src);
+    setSourceError(null);
     setRunning(true);
-    timer.current = setInterval(() => {
-      const frame = str.next();
-      const snap = eng.push(frame);
-      setLatestFrame(frame);
-      setSnapshot(snap);
-      if (snap.cue) setLatestCue(snap.cue);
-      if (snap.phase === 'complete') {
-        clear();
-        setRunning(false);
-        const metrics = eng.result();
-        if (metrics) {
-          setResult({
-            id: `drill-${drillType}-${startedAt}`,
-            sport: 'soccer',
-            drillType,
-            startedAt,
-            metrics,
-          });
-        }
-      }
-    }, 1000 / TARGET_FPS);
-  }, [clear, drillType, seed]);
 
-  return { snapshot, latestFrame, latestCue, running, result, start, stop, reset };
+    src.start(
+      (frame) => {
+        if (active.current !== src) return;
+        // REC-1: the next valid frame clears a stall (other errors already tore the source down).
+        setSourceError((prev) => (prev === 'stalled' ? null : prev));
+        const snap = eng.push(frame);
+        setFps(fpsMeter.push(frame.timestampMs));
+        setLatestFrame(frame);
+        setSnapshot(snap);
+        if (snap.cue) {
+          setLatestCue(snap.cue);
+          optsRef.current.onCue?.(snap.cue);
+        }
+        if (snap.phase === 'complete') {
+          teardown();
+          setRunning(false);
+          const metrics = eng.result();
+          if (metrics) {
+            setResult({
+              id: `drill-${drillType}-${startedAt}`,
+              sport: 'soccer',
+              drillType,
+              startedAt,
+              metrics,
+            });
+          }
+        }
+      },
+      (error) => {
+        if (active.current !== src) return;
+        if (error === 'stalled') {
+          // REC-1: a stall is recoverable - keep the provider and engine, just surface the notice.
+          setSourceError('stalled');
+          return;
+        }
+        teardown();
+        setRunning(false);
+        setSourceError(error);
+      },
+    );
+    return true;
+  }, [drillType, teardown]);
+
+  return {
+    snapshot,
+    latestFrame,
+    latestCue,
+    running,
+    result,
+    start,
+    stop,
+    reset,
+    sourceKind: provider ? provider.kind : null,
+    provider,
+    fps,
+    sourceError,
+  };
 }

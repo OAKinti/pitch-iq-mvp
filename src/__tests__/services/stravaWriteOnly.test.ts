@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildDebriefPrompt } from '../../services/voice/debriefPrompt';
+import { buildDebriefRequest } from '../../services/voice/debriefPrompt';
 import { AI_SAFE_SOURCES } from '../../services/wearables/aiSafety';
 import {
   STRAVA_CREATE_ACTIVITY_URL,
@@ -50,20 +50,40 @@ describe('Strava is write-only', () => {
 
   it('builds the activity payload', () => {
     const p = buildStravaActivityPayload(ballResult);
-    expect(Object.keys(p).sort()).toEqual(['description', 'elapsed_time', 'name', 'sport_type', 'start_date_local']);
+    expect(Object.keys(p).sort()).toEqual([
+      'description',
+      'elapsed_time',
+      'name',
+      'sport_type',
+      'start_date_local',
+    ]);
     expect(p.sport_type).toBe('Soccer');
   });
 
-  it('(c) buildDebriefPrompt throws when wearables include strava', () => {
+  it('(c) buildDebriefRequest throws when wearables include strava', () => {
     const wearables = [{ source: 'strava' }] as never;
-    expect(() => buildDebriefPrompt({ persona: 'captain', result: ballResult, ovr, badges, topArchetype: archetype, wearables })).toThrow();
+    expect(() =>
+      buildDebriefRequest({
+        persona: 'captain',
+        result: ballResult,
+        ovr,
+        badges,
+        topArchetype: archetype,
+        wearables,
+      }),
+    ).toThrow();
   });
 
   it('(d) voice/ and supabase/ never import anything strava-related', () => {
-    const files = [...listTs(path.join(servicesDir, 'voice')), ...listTs(path.join(servicesDir, 'supabase'))];
+    const files = [
+      ...listTs(path.join(servicesDir, 'voice')),
+      ...listTs(path.join(servicesDir, 'supabase')),
+    ];
     expect(files.length).toBeGreaterThan(5);
     for (const f of files) {
-      const imports = fs.readFileSync(f, 'utf8').match(/^\s*(?:import|export)\b[^;]*?from\s+['"][^'"]+['"]/gm) ?? [];
+      const imports =
+        fs.readFileSync(f, 'utf8').match(/^\s*(?:import|export)\b[^;]*?from\s+['"][^'"]+['"]/gm) ??
+        [];
       for (const line of imports) expect(line).not.toMatch(/strava/i);
     }
   });

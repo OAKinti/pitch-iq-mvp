@@ -1,9 +1,12 @@
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { renderNavigator } from './helpers';
 
-const isDisabled = (id: string): boolean => Boolean(screen.getByTestId(id).props.accessibilityState?.disabled);
-const probe = () => JSON.parse(String(screen.getByTestId('probe').props.children)) as Record<string, unknown>;
+const isDisabled = (id: string): boolean =>
+  Boolean(screen.getByTestId(id).props.accessibilityState?.disabled);
+const probe = () =>
+  JSON.parse(String(screen.getByTestId('probe').props.children)) as Record<string, unknown>;
 
 async function enterBirth(year: string, month: string) {
   await fireEvent.changeText(screen.getByTestId('age-year-input'), year);
@@ -11,6 +14,10 @@ async function enterBirth(year: string, month: string) {
 }
 
 describe('OnboardingScreen', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
   it('starts with empty, unprefilled age inputs and a disabled continue', async () => {
     await renderNavigator();
     expect(screen.getByTestId('screen-onboarding')).toBeTruthy();
@@ -59,7 +66,9 @@ describe('OnboardingScreen', () => {
     await fireEvent.press(screen.getByTestId('position-option-FWD'));
     expect(probe().persona).toBe('hype');
     expect(probe().position).toBe('FWD');
-    expect(screen.getByTestId('persona-option-hype').props.accessibilityState).toEqual({ selected: true });
+    expect(screen.getByTestId('persona-option-hype').props.accessibilityState).toEqual({
+      selected: true,
+    });
     await fireEvent.press(screen.getByTestId('onboarding-finish'));
     expect(screen.getByTestId('screen-combine')).toBeTruthy();
   });
@@ -98,5 +107,34 @@ describe('OnboardingScreen', () => {
     await fireEvent.press(screen.getByTestId('age-continue'));
     expect(screen.queryByTestId('private-account-notice')).toBeNull();
     expect(probe().age).toBe('teen_13_17');
+  });
+
+  it('AUTH-4: first run has empty inputs; after a restart the persisted age locks the age step', async () => {
+    const first = await renderNavigator();
+    expect(screen.getByTestId('age-year-input').props.value).toBe('');
+    await enterBirth('2000', '6');
+    await fireEvent.press(screen.getByTestId('age-continue'));
+    expect(screen.getByTestId('consent-accept')).toBeTruthy();
+    await first.unmount();
+
+    // "Restart": a fresh provider reads the persisted bracket from storage.
+    await renderNavigator();
+    expect(screen.queryByTestId('age-year-input')).toBeNull();
+    expect(screen.queryByTestId('age-continue')).toBeNull();
+    expect(screen.getByTestId('consent-accept')).toBeTruthy();
+    expect(probe().age).toBe('adult_18_plus');
+  });
+
+  it('AUTH-4: a restart after consent resumes at the coach/position step', async () => {
+    const first = await renderNavigator();
+    await enterBirth('2000', '6');
+    await fireEvent.press(screen.getByTestId('age-continue'));
+    await fireEvent.press(screen.getByTestId('consent-checkbox'));
+    await fireEvent.press(screen.getByTestId('consent-accept'));
+    await first.unmount();
+
+    await renderNavigator();
+    expect(screen.queryByTestId('age-year-input')).toBeNull();
+    expect(screen.getByTestId('onboarding-finish')).toBeTruthy();
   });
 });
