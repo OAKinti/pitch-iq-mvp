@@ -57,7 +57,10 @@ function fakeRepo(): jest.Mocked<PitchIqRepository> {
       code: 'ABCDEFGHJK',
       url: 'pitchiq://join/ABCDEFGHJK',
     })),
-    joinGroupByInvite: jest.fn<Promise<JoinResult>, [string]>(async () => ({ ok: true as const, groupId: 'g' })),
+    joinGroupByInvite: jest.fn<Promise<JoinResult>, [string]>(async () => ({
+      ok: true as const,
+      groupId: 'g',
+    })),
   };
 }
 
@@ -301,6 +304,23 @@ describe('AppStateProvider COPPA and persistence', () => {
       'uid-5',
       expect.objectContaining({ ageBracket: 'under_13' }),
     );
+  });
+
+  it('restart re-sync writes the profile row BEFORE the persisted consents (FK order)', async () => {
+    const localProfile = createLocalProfileStore(createMemoryStorage());
+    await localProfile.save({ ageBracket: 'teen_13_17', consents: [CAMERA_CONSENT as never] });
+    const order: string[] = [];
+    const repository = fakeRepo();
+    repository.saveProfile.mockImplementation(async () => {
+      order.push('profile');
+    });
+    repository.recordConsent.mockImplementation(async () => {
+      order.push('consent');
+    });
+    await mount({ localProfile, repository, auth: fakeAuth('uid-6') });
+    await flush();
+    expect(order.slice(0, 2)).toEqual(['profile', 'consent']);
+    expect(app.syncStatus).toBe('ok');
   });
 
   it('first run starts unlocked and persists the bracket and consent locally immediately', async () => {

@@ -295,6 +295,9 @@ export function AppStateProvider({
           setAgeBracket(lp.ageBracket);
           setAgeLocked(true);
           live.current.ageLocked = true;
+          // Enqueue the profile row BEFORE the re-synced consents below: consents reference
+          // profiles(id), so after an offline onboarding the profile insert must land first.
+          syncProfile(lp.ageBracket, live.current.position, live.current.persona);
         }
         if (!initial?.consents && lp.consents.length > 0) {
           live.current.consents = lp.consents;

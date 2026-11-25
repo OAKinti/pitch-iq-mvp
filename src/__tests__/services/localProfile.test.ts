@@ -15,6 +15,29 @@ const consent = {
 const EMPTY = { ageBracket: null, consents: [], onboardedAt: null };
 
 describe('localProfile', () => {
+  it('serializes saves issued in the same tick so neither patch is lost', async () => {
+    const storage = createMemoryStorage();
+    const slow: KeyValueStorage = {
+      ...storage,
+      // yield between read and write so unserialized saves would interleave
+      getItem: async (k) => {
+        await new Promise((r) => setTimeout(r, 5));
+        return storage.getItem(k);
+      },
+    };
+    const store = createLocalProfileStore(slow);
+    await Promise.all([
+      store.save({ ageBracket: 'teen_13_17' }),
+      store.save({ consents: [consent] }),
+      store.save({ onboardedAt: 'now' }),
+    ]);
+    expect(await store.load()).toEqual({
+      ageBracket: 'teen_13_17',
+      consents: [consent],
+      onboardedAt: 'now',
+    });
+  });
+
   it('starts empty, then round-trips age, consents and onboardedAt (merging patches)', async () => {
     const storage = createMemoryStorage();
     const store = createLocalProfileStore(storage);

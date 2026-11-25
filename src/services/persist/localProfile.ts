@@ -22,9 +22,17 @@ export interface LocalProfileStore {
 export const LOCAL_PROFILE_KEY = 'pitchiq.localProfile.v1';
 
 const AGE_BRACKETS: readonly AgeBracket[] = ['under_13', 'teen_13_17', 'adult_18_plus'];
-const CONSENT_TYPES: readonly ConsentType[] = ['camera_skeletal_tracking', 'voice_coach', 'parental_verified'];
+const CONSENT_TYPES: readonly ConsentType[] = [
+  'camera_skeletal_tracking',
+  'voice_coach',
+  'parental_verified',
+];
 
-export const emptyLocalProfile = (): LocalProfile => ({ ageBracket: null, consents: [], onboardedAt: null });
+export const emptyLocalProfile = (): LocalProfile => ({
+  ageBracket: null,
+  consents: [],
+  onboardedAt: null,
+});
 
 function isConsent(v: unknown): v is ConsentRecord {
   if (typeof v !== 'object' || v === null) return false;
@@ -42,7 +50,9 @@ export function parseLocalProfile(raw: string | null): LocalProfile {
   try {
     const o = JSON.parse(raw) as Record<string, unknown>;
     return {
-      ageBracket: AGE_BRACKETS.includes(o.ageBracket as AgeBracket) ? (o.ageBracket as AgeBracket) : null,
+      ageBracket: AGE_BRACKETS.includes(o.ageBracket as AgeBracket)
+        ? (o.ageBracket as AgeBracket)
+        : null,
       consents: Array.isArray(o.consents) ? o.consents.filter(isConsent) : [],
       onboardedAt: typeof o.onboardedAt === 'string' ? o.onboardedAt : null,
     };
@@ -65,9 +75,12 @@ export function createMemoryStorage(): KeyValueStorage {
   };
 }
 
-export function createLocalProfileStore(storage: KeyValueStorage = AsyncStorage): LocalProfileStore {
+export function createLocalProfileStore(
+  storage: KeyValueStorage = AsyncStorage,
+): LocalProfileStore {
   const fallback = createMemoryStorage();
   let useFallback = false;
+  let queue: Promise<void> = Promise.resolve();
   const pick = (): KeyValueStorage => (useFallback ? fallback : storage);
 
   return {
@@ -79,17 +92,24 @@ export function createLocalProfileStore(storage: KeyValueStorage = AsyncStorage)
         return parseLocalProfile(await fallback.getItem(LOCAL_PROFILE_KEY));
       }
     },
-    async save(patch) {
+    save(patch) {
       const write = async (s: KeyValueStorage): Promise<void> => {
         const merged = { ...parseLocalProfile(await s.getItem(LOCAL_PROFILE_KEY)), ...patch };
         await s.setItem(LOCAL_PROFILE_KEY, JSON.stringify(merged));
       };
-      try {
-        await write(pick());
-      } catch {
-        useFallback = true;
-        await write(fallback);
-      }
+      const run = async (): Promise<void> => {
+        try {
+          await write(pick());
+        } catch {
+          useFallback = true;
+          await write(fallback);
+        }
+      };
+      // Serialize read-modify-write: two saves in the same tick (setAge then grantConsent) must not
+      // both read the pre-write value and drop each other's fields.
+      const next = queue.then(run, run);
+      queue = next.catch(() => undefined);
+      return next;
     },
   };
 }

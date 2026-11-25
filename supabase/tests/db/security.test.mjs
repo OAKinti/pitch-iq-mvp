@@ -75,12 +75,29 @@ test('H-consent: a client INSERT cannot pre-set parental_consent_verified_at', a
        values ($1, 'sneaky', 'under_13', now())`,
       [fresh],
     ),
-  ).catch(() => undefined);
+  ); // the insert itself is allowed (own row); the guard trigger must sanitize it
   const row = await db.query(
     'select parental_consent_verified_at from public.profiles where id = $1',
     [fresh],
   );
-  if (row.rows.length) assert.equal(row.rows[0].parental_consent_verified_at, null);
+  assert.equal(row.rows.length, 1);
+  assert.equal(row.rows[0].parental_consent_verified_at, null);
+});
+
+test('H-consent: a user cannot DELETE their profile (would reset age and cascade-delete consents)', async () => {
+  await db.query(
+    `insert into public.consents (user_id, consent_type, policy_version) values ($1, 'camera_skeletal_tracking', 'v1')
+     on conflict do nothing`,
+    [kid],
+  );
+  const msg = await failure(
+    asCommit(db, 'authenticated', kid, (t) => t.query('delete from public.profiles where id = $1', [kid])),
+  );
+  assert.match(msg ?? '', /permission denied/);
+  const p = await db.query('select age_bracket from public.profiles where id = $1', [kid]);
+  assert.equal(p.rows[0].age_bracket, 'under_13');
+  const c = await db.query('select count(*)::int n from public.consents where user_id = $1', [kid]);
+  assert.equal(c.rows[0].n, 1);
 });
 
 test("H-consent: a client cannot insert a 'parental_verified' consent", async () => {
@@ -191,12 +208,13 @@ test('Medium: a client cannot push created_at / raw_video_expires_at past the 90
        values ($1, $2, 'ball_mastery', now(), '{}', '2099-01-01', '2099-03-01')`,
       [id, adult],
     ),
-  ).catch(() => undefined);
+  ); // allowed; the pin trigger must rewrite the TTL columns
   const r = await db.query(
     `select raw_video_expires_at <= now() + interval '90 days 1 minute' as ok from public.drill_sessions where id = $1`,
     [id],
   );
-  if (r.rows.length) assert.equal(r.rows[0].ok, true);
+  assert.equal(r.rows.length, 1);
+  assert.equal(r.rows[0].ok, true);
 });
 
 test("Medium: raw_video_path must live under the owner's folder", async () => {

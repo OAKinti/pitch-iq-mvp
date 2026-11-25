@@ -11,6 +11,9 @@
 -- revoke at table level, grant back only the user-editable columns.
 revoke update on public.profiles from anon, authenticated;
 grant update (display_name, visibility, position, persona, updated_at) on public.profiles to authenticated;
+-- No client DELETE either: deleting the row and re-inserting it would reset the fixed age bracket
+-- and cascade-delete the insert-only consent records. Account deletion requests run as service_role.
+revoke delete on public.profiles from anon, authenticated;
 
 -- Belt and braces (also covers INSERT): API roles can never set parental verification, and the
 -- age bracket is fixed once written. Only service_role (a future verifiable-parental-consent
