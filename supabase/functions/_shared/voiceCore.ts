@@ -398,8 +398,8 @@ export async function handleDebrief(
   const tier2 = await deps.tier2Status(userId);
   if (tier2 !== 'ok') return { status: 200, body: { ok: false, reason: tier2 } };
 
-  if (!(await deps.reserveGlobal())) return { status: 429, body: { ok: false, reason: 'rate_limited' } };
-
+  // Per-user monthly cap FIRST: an account that is already capped must not consume the shared daily
+  // ceiling, or one account could exhaust Tier 2 for everyone.
   const month = await deps.reserveChars(userId, DEBRIEF_RESERVE_CHARS);
   if (month === null) return { status: 200, body: { ok: false, reason: 'monthly_cap' } };
 
@@ -411,6 +411,18 @@ export async function handleDebrief(
       // best effort: never mask the user-visible outcome
     }
   };
+
+  let globalOk: boolean;
+  try {
+    globalOk = await deps.reserveGlobal();
+  } catch (e) {
+    await refund(DEBRIEF_RESERVE_CHARS);
+    throw e;
+  }
+  if (!globalOk) {
+    await refund(DEBRIEF_RESERVE_CHARS);
+    return { status: 429, body: { ok: false, reason: 'rate_limited' } };
+  }
 
   let result: CompletionResult;
   try {

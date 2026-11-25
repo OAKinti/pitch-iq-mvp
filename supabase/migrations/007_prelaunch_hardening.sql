@@ -88,8 +88,11 @@ begin
     if tg_op = 'INSERT' then
       new.granted_at := now();
       new.revoked_at := null;
-    elsif old.revoked_at is not null then
-      new.revoked_at := old.revoked_at;
+    else
+      new.granted_at := old.granted_at;
+      if old.revoked_at is not null then
+        new.revoked_at := old.revoked_at;
+      end if;
     end if;
   end if;
   return new;

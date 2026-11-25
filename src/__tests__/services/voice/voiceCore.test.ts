@@ -476,7 +476,7 @@ describe('handleDebrief', () => {
         usage: { inputTokens: 100, outputTokens: 20 },
       },
     });
-    expect(calls).toEqual(['tier2', 'global', 'reserve', 'complete', 'refund', 'tts']);
+    expect(calls).toEqual(['tier2', 'reserve', 'global', 'complete', 'refund', 'tts']);
     expect(deps.reserveChars).toHaveBeenCalledWith('user-1', DEBRIEF_RESERVE_CHARS);
     expect(deps.refundChars).toHaveBeenCalledWith(
       'user-1',
@@ -644,11 +644,27 @@ describe('D-9C Tier-2 gate (under-13 needs verifiable parental consent)', () => 
     },
   );
 
-  it('B-6: the global daily ceiling returns 429 rate_limited before any per-user reserve or provider call', async () => {
+  it('B-6: over the global daily ceiling -> 429 rate_limited, the per-user reservation is refunded, no provider call', async () => {
     const { deps, calls } = mkDeps({ reserveGlobal: jest.fn(async () => false) });
     expect(await handleDebrief(raw(), 'u', deps)).toEqual({ status: 429, body: { ok: false, reason: 'rate_limited' } });
-    expect(calls).toEqual(['tier2']);
-    expect(deps.reserveChars).not.toHaveBeenCalled();
+    expect(calls).toEqual(['tier2', 'reserve', 'refund']);
+    expect(deps.complete).not.toHaveBeenCalled();
+  });
+
+  it('B-6: an account at its monthly cap never touches the shared daily ceiling', async () => {
+    const { deps } = mkDeps({ reserveChars: jest.fn(async () => null) });
+    expect(await handleDebrief(raw(), 'u', deps)).toEqual({ status: 200, body: { ok: false, reason: 'monthly_cap' } });
+    expect(deps.reserveGlobal).not.toHaveBeenCalled();
+  });
+
+  it('B-6: a reserveGlobal failure refunds the reservation and fails closed', async () => {
+    const { deps, calls } = mkDeps({
+      reserveGlobal: jest.fn(async () => {
+        throw new Error('rpc');
+      }),
+    });
+    await expect(handleDebrief(raw(), 'u', deps)).rejects.toThrow('rpc');
+    expect(calls).toEqual(['tier2', 'reserve', 'refund']);
     expect(deps.complete).not.toHaveBeenCalled();
   });
 
