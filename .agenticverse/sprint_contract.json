@@ -7,8 +7,24 @@
     "OWNER TO CONFIRM (default below is fail-closed): SEC-17 blocks social handoff for under_13 and unknown age brackets. TikTok iOS redirect URI (universal link) has no allowlisted EXPO_PUBLIC_* variable, so it is injected by the caller; until the owner supplies it TikTok on iOS falls back to the OS share sheet (FAIL-14)."
   ],
   "task_clauses": {
-    "D4.1a": ["SEC-9", "SEC-10", "SEC-11", "SEC-18", "ECON-7", "FAIL-10"],
-    "D4.2a": ["SEC-12", "REC-5", "REC-6", "CON-5", "CON-6", "CON-7", "CON-8", "FAIL-11"],
+    "D4.1a": [
+      "SEC-9",
+      "SEC-10",
+      "SEC-11",
+      "SEC-18",
+      "ECON-7",
+      "FAIL-10"
+    ],
+    "D4.2a": [
+      "SEC-12",
+      "REC-5",
+      "REC-6",
+      "CON-5",
+      "CON-6",
+      "CON-7",
+      "CON-8",
+      "FAIL-11"
+    ],
     "D6.1a": [
       "SEC-13",
       "SEC-14",
@@ -33,8 +49,23 @@
       "CON-12",
       "MEDIA-2"
     ],
-    "D5.1a": ["A11Y-1", "A11Y-2", "A11Y-3", "UI-1", "UI-2", "SEC-15", "SEC-17"],
-    "D7.4a": ["REL-1", "REL-2", "REL-3", "REL-4", "REL-5", "SEC-20"]
+    "D5.1a": [
+      "A11Y-1",
+      "A11Y-2",
+      "A11Y-3",
+      "UI-1",
+      "UI-2",
+      "SEC-15",
+      "SEC-17"
+    ],
+    "D7.4a": [
+      "REL-1",
+      "REL-2",
+      "REL-3",
+      "REL-4",
+      "REL-5",
+      "SEC-20"
+    ]
   },
   "interfaces": [
     {
@@ -327,7 +358,7 @@
     ],
     "release": [
       "REL-1 (D7.4a) Store identity: expo.ios.bundleIdentifier === expo.android.package, reverse-DNS with at least 3 segments, and equal to the appId of every .maestro flow; expo.version is x.y.z; ios.buildNumber is a string of digits not starting with 0; android.versionCode is an integer >= 1; name, slug, scheme and an existing icon file are present.",
-      "REL-2 (D7.4a) eas.json: cli.appVersionSource is 'remote'; build.development deep-equals the D2.0 profile; build.production has distribution 'store', autoIncrement true, android.buildType 'app-bundle', and no developmentClient.",
+      "REL-2 (D7.4a; amended Nov 25 by the owner-approved deploy run) eas.json: cli.appVersionSource is 'remote'; build.development deep-equals the D2.0 profile plus env.ORG_GRADLE_PROJECT_reactNativeArchitectures = 'arm64-v8a' (the all-ABI dev build exceeded the 45-min EAS free-tier limit); build.production has distribution 'store', autoIncrement true, android.buildType 'app-bundle', no developmentClient and no architecture override.",
       "REL-3 (D7.4a) Permission audit: NSCameraUsageDescription, NSMicrophoneUsageDescription and NSPhotoLibraryAddUsageDescription exist, start with PitchIQ and are >= 40 chars; the camera string is identical in infoPlist, the expo-camera plugin and the expo-mediapipe-pose plugin and mentions skeletal and consent; the microphone string is identical in infoPlist, expo-camera and expo-audio; ITSAppUsesNonExemptEncryption is false; infoPlist has no face-id, location, tracking, speech-recognition, contacts or UIBackgroundModes key; android.permissions is exactly [android.permission.CAMERA]; android.blockedPermissions holds the eight media/storage/location permissions and neither CAMERA nor RECORD_AUDIO.",
       "REL-4 (D7.4a) docs/RELEASE_CHECKLIST.md has sections for prerequisites, version bump, secrets and env, iOS TestFlight, Android Play Internal App Sharing, privacy and store declarations, smoke test and rollback; it contains `eas build --profile production --platform ios`, `eas build --profile production --platform android` and `eas submit`; human, device and secret steps carry the SPRINT_STATE tags; it has no TBD or TODO.",
       "REL-5 (D7.4a) D2.0 config is intact: the plugin order is expo-dev-client, expo-build-properties, expo-audio, expo-camera, expo-media-library, expo-mediapipe-pose, react-native-share, expo-asset; android minSdkVersion is 26; expo-audio has recordAudioAndroid, enableBackgroundRecording and enableBackgroundPlayback false; expo-media-library has granularPermissions [] and isAccessMediaLocationEnabled false; expo-camera has barcodeScannerEnabled false."
