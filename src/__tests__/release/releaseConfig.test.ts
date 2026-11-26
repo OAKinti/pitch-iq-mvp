@@ -53,7 +53,11 @@ describe('release config', () => {
       developmentClient: true,
       distribution: 'internal',
       android: { buildType: 'apk' },
+      // Nov 25: the first all-ABI dev build hit the 45-min free-tier limit; dev builds are arm64 only.
+      env: { ORG_GRADLE_PROJECT_reactNativeArchitectures: 'arm64-v8a' },
     });
+    // production must keep every ABI (no architecture override)
+    expect(JSON.stringify(eas.build.production)).not.toMatch(/reactNativeArchitectures/);
   });
 
   it('iOS usage strings are present, consistent and specific', () => {
