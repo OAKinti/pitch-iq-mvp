@@ -11,26 +11,106 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.pitchiq.mvp",
+      "buildNumber": "1",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "PitchIQ uses the camera to track your body's skeletal joints during drills. No facial geometry is collected, and tracking only starts after you give consent.",
         "NSMicrophoneUsageDescription": "PitchIQ records audio only when you save a highlight clip.",
         "NSPhotoLibraryAddUsageDescription": "PitchIQ saves highlight clips to your library so you can share them.",
-        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram-reels", "instagram", "tiktokopensdk", "snssdk1233", "snssdk1180"]
+        "LSApplicationQueriesSchemes": [
+          "instagram-stories",
+          "instagram-reels",
+          "instagram",
+          "tiktokopensdk",
+          "snssdk1233",
+          "snssdk1180"
+        ]
       }
     },
     "android": {
       "package": "com.pitchiq.mvp",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#07090B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.CAMERA"],
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "PitchIQ records audio only when you save a highlight clip.",
+          "recordAudioAndroid": false,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PitchIQ uses the camera to track your body's skeletal joints during drills. No facial geometry is collected, and tracking only starts after you give consent.",
+          "microphonePermission": "PitchIQ records audio only when you save a highlight clip.",
+          "recordAudioAndroid": true,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "PitchIQ reads back only the highlight clip it just saved, so you can hand it to TikTok.",
+          "savePhotosPermission": "PitchIQ saves highlight clips to your library so you can share them.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": []
+        }
+      ],
+      [
+        "react-native-share",
+        {
+          "ios": [],
+          "android": [
+            "com.instagram.android",
+            "com.zhiliaoapp.musically",
+            "com.ss.android.ugc.trill"
+          ],
+          "enableBase64ShareAndroid": false
+        }
+      ],
+      "expo-asset",
+      "./plugins/withGradleMemory"
+    ],
+    "owner": "oakinti",
+    "extra": {
+      "eas": {
+        "projectId": "67e870a0-0adb-48ff-8b94-f31bc6ddf3c8"
+      }
     }
   }
 }

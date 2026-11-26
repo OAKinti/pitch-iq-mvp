@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { HudPanel, NavBackButton, ScreenFrame, SectionLabel } from '../components';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Share, StyleSheet, Text, View } from 'react-native';
+import { HudButton, HudPanel, NavBackButton, ScreenFrame, SectionLabel } from '../components';
 import { useAppState } from '../state/AppStateContext';
 import { computeCrowns, computeRivalry } from '../domain';
-import { DEMO_GROUP_ID, DEMO_USER_ID } from '../services';
+import { DEMO_USER_ID } from '../services';
 import type { GroupMemberStat } from '../types/contracts';
 import { borders, colors, radii, sizes, spacing, typography } from '../theme/tokens';
 
@@ -22,25 +22,53 @@ function activeDaysInWindow(member: GroupMemberStat, now: Date): number {
 }
 
 export function GroupSessionScreen() {
-  const { repository, now } = useAppState();
+  const {
+    repository,
+    now,
+    groupId,
+    requiresParent,
+    joinNotice,
+    userId,
+    pendingInvite,
+    acceptPendingInvite,
+    declinePendingInvite,
+    hasConsent,
+  } = useAppState();
+  const parentLocked = requiresParent && !hasConsent('parental_verified');
+  // The signed-in user (anonymous auth, D-9A); Demo Mode resolves to the demo id.
+  const meId = userId ?? DEMO_USER_ID;
   const [members, setMembers] = useState<GroupMemberStat[]>([]);
+  const [inviteError, setInviteError] = useState(false);
+
+  const createInvite = async (): Promise<void> => {
+    setInviteError(false);
+    try {
+      const { url } = await repository.createGroupInvite(groupId);
+      await Share.share({ message: `Join my PitchIQ squad: ${url}` });
+    } catch {
+      setInviteError(true);
+    }
+  };
+  const snapshotSeen = useRef(false);
 
   useEffect(() => {
     let active = true;
+    snapshotSeen.current = false;
     repository
-      .listGroupMembers(DEMO_GROUP_ID)
+      .listGroupMembers(groupId)
       .then((m) => {
-        if (active) setMembers(m);
+        if (active && !snapshotSeen.current) setMembers(m);
       })
       .catch(() => undefined);
-    const unsubscribe = repository.subscribeToGroup(DEMO_GROUP_ID, (m) => {
+    const unsubscribe = repository.subscribeToGroup(groupId, (m) => {
+      snapshotSeen.current = true;
       if (active) setMembers(m);
     });
     return () => {
       active = false;
       unsubscribe();
     };
-  }, [repository]);
+  }, [repository, groupId]);
 
   const ranked = useMemo(() => [...members].sort((a, b) => b.bestOvr - a.bestOvr), [members]);
   const clock = now();
@@ -48,7 +76,7 @@ export function GroupSessionScreen() {
   const performer = members.find((m) => m.userId === crowns.performance);
   const consistent = members.find((m) => m.userId === crowns.consistency);
 
-  const myIndex = ranked.findIndex((m) => m.userId === DEMO_USER_ID);
+  const myIndex = ranked.findIndex((m) => m.userId === meId);
   const me = ranked[myIndex];
   const rival = myIndex > 0 ? ranked[myIndex - 1] : ranked[myIndex + 1];
   const rivalry = me && rival ? computeRivalry(me, rival) : null;
@@ -56,11 +84,59 @@ export function GroupSessionScreen() {
   return (
     <ScreenFrame testID="screen-group" kicker="Group session" title="Sunday league">
       <NavBackButton />
+      {pendingInvite ? (
+        <HudPanel testID="group-join-confirm" accent title="Squad invite">
+          <Text style={styles.crownName}>
+            {parentLocked
+              ? 'A parent needs to verify your account before you can join a squad.'
+              : 'Join this squad? Squad members will see your display name and scores.'}
+          </Text>
+          {parentLocked ? null : (
+            <HudButton
+              testID="group-join-accept"
+              label="Join squad"
+              onPress={acceptPendingInvite}
+            />
+          )}
+          <HudButton
+            testID="group-join-decline"
+            label={parentLocked ? 'Dismiss' : 'Not now'}
+            variant="secondary"
+            onPress={declinePendingInvite}
+          />
+        </HudPanel>
+      ) : null}
+      {joinNotice ? (
+        <HudPanel accent={joinNotice.ok} title="Squad invite">
+          <Text testID="group-join-notice" style={styles.crownName}>
+            {joinNotice.text}
+          </Text>
+        </HudPanel>
+      ) : null}
+      {requiresParent ? null : (
+        <>
+          <HudButton
+            testID="group-invite-create"
+            label="Invite to squad"
+            variant="secondary"
+            onPress={() => {
+              void createInvite();
+            }}
+          />
+          {inviteError ? (
+            <Text testID="group-invite-error" style={styles.crownStat}>
+              Could not create an invite link. Try again.
+            </Text>
+          ) : null}
+        </>
+      )}
       <View style={styles.crowns}>
         <View style={styles.flex}>
           <HudPanel testID="crown-performance" title="Performance crown" accent>
             <Text style={styles.crownName}>{performer ? performer.displayName : '—'}</Text>
-            <Text style={styles.crownStat}>{performer ? `${performer.bestOvr.toFixed(1)} OVR` : ''}</Text>
+            <Text style={styles.crownStat}>
+              {performer ? `${performer.bestOvr.toFixed(1)} OVR` : ''}
+            </Text>
           </HudPanel>
         </View>
         <View style={styles.flex}>
@@ -78,7 +154,10 @@ export function GroupSessionScreen() {
           <>
             <Text style={styles.rivalry}>{rivalry.description}</Text>
             <View style={styles.track}>
-              <View testID="rivalry-progress" style={[styles.fill, { width: `${rivalry.progress * 100}%` }]} />
+              <View
+                testID="rivalry-progress"
+                style={[styles.fill, { width: `${rivalry.progress * 100}%` }]}
+              />
             </View>
             <SectionLabel text={`${Math.round(rivalry.progress * 100)}% there`} tone="telemetry" />
           </>
@@ -92,9 +171,9 @@ export function GroupSessionScreen() {
           <View
             key={m.userId}
             testID={`leaderboard-row-${m.userId}`}
-            style={[styles.row, m.userId === DEMO_USER_ID && styles.rowMe]}
+            style={[styles.row, m.userId === meId && styles.rowMe]}
           >
-            <Text style={styles.rank}>{i + 1}</Text>
+            <Text style={[styles.rank, m.userId === meId && styles.rankMe]}>{i + 1}</Text>
             <Text style={styles.name}>{m.displayName}</Text>
             <Text style={styles.score}>{m.bestOvr.toFixed(1)}</Text>
           </View>
@@ -107,7 +186,11 @@ export function GroupSessionScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   crowns: { flexDirection: 'row', gap: spacing.md },
-  crownName: { color: colors.textPrimary, fontSize: typography.size.title, fontWeight: typography.weight.black },
+  crownName: {
+    color: colors.textPrimary,
+    fontSize: typography.size.title,
+    fontWeight: typography.weight.black,
+  },
   crownStat: {
     color: colors.crownGold,
     fontFamily: typography.family.mono,
@@ -138,6 +221,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.bodyLg,
     ...typography.tabular,
   },
+  rankMe: { color: colors.textSecondary },
   name: { flex: 1, color: colors.textPrimary, fontSize: typography.size.bodyLg },
   score: {
     color: colors.accent,

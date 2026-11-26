@@ -1,0 +1,53 @@
+# Adult onboarding, simulated drill, sticker on the share screen, share summary after a tap.
+appId: com.pitchiq.mvp
+name: PitchIQ sticker share
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: screen-onboarding
+- tapOn:
+    id: age-year-input
+- inputText: "2004"
+- tapOn:
+    id: age-month-input
+- inputText: "6"
+- hideKeyboard
+- tapOn:
+    id: age-continue
+- tapOn:
+    id: consent-checkbox
+- tapOn:
+    id: consent-accept
+- tapOn:
+    id: persona-option-captain
+- tapOn:
+    id: position-option-MID
+- tapOn:
+    id: onboarding-finish
+- assertVisible:
+    id: screen-combine
+- tapOn:
+    id: drill-option-ball_mastery
+- tapOn:
+    id: simulate-toggle
+- tapOn:
+    id: drill-start
+- extendedWaitUntil:
+    visible:
+      id: drill-view-results
+    timeout: 45000
+- tapOn:
+    id: drill-view-results
+- assertVisible:
+    id: screen-ovr
+- tapOn:
+    id: ovr-share
+- assertVisible:
+    id: screen-highlight
+- assertVisible:
+    id: ovr-sticker
+- tapOn:
+    id: share-instagram_stories
+- assertVisible:
+    id: share-summary

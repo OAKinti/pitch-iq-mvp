@@ -1,9 +1,72 @@
 {
-  "sprint": "PitchIQ Day 2-7 agent work (D2.0-D2.5 clauses here; D4.1a/D4.2a/D5.1a/D6.0/D6.1a/D6.2a/D7.4a clauses are added by the wave-0 spec step) - target CONTRACT_VERSION 1.1.0 - written 2026-11-24, D-5/D-6 accepted by owner 2026-11-24",
+  "sprint": "PitchIQ Day 2-7 agent work (D2.0-D2.5 clauses written 2026-11-24, D-5/D-6 accepted by owner 2026-11-24; D4.1a/D4.2a/D5.1a/D6.1a/D6.2a/D7.4a clauses added 2026-11-24 by the wave-0 spec step, D-7 accepted) - target CONTRACT_VERSION 1.1.0 (no v1.2.0 needed, see D4.1a interface)",
   "decisions_required": [
     "D-5 ACCEPTED by owner 2026-11-24 (Person A owns): live pose via expo-mediapipe-pose 0.5.2 (own native camera session); react-native-vision-camera 5.2.4 deferred to D6.1. Every CV interface below assumes D-5 = accepted.",
-    "D-6 ACCEPTED by owner 2026-11-24 (Person B owns): frozen-area contract change v1.1.0 = DebriefRequest/DebriefResponse wire types in src/types/contracts.ts, DebriefTransport v2, migration 003 quota RPCs. Lands in D2.0 with docs/INTERFACE_CONTRACTS.md + CONTRACT_VERSION + Decisions entry in the same commit."
+    "D-6 ACCEPTED by owner 2026-11-24 (Person B owns): frozen-area contract change v1.1.0 = DebriefRequest/DebriefResponse wire types in src/types/contracts.ts, DebriefTransport v2, migration 003 quota RPCs. Lands in D2.0 with docs/INTERFACE_CONTRACTS.md + CONTRACT_VERSION + Decisions entry in the same commit.",
+    "D-7 ACCEPTED by owner 2026-11-24: no FFmpeg, no Nitro, vision-camera dropped. Recording = expo-camera CameraView sequenced with expo-mediapipe-pose through one camera-mode machine idle|pose|record; encoder = local Expo Module modules/highlight-encoder behind ClipEncoder; sticker = react-native-view-shot; share = react-native-share (Instagram Stories) + local module modules/social-handoff (Reels, TikTok Share Kit v2). Native Swift/Kotlin of both local modules is device work (D6.1/D6.2), not agent work.",
+    "OWNER TO CONFIRM (default below is fail-closed): SEC-17 blocks social handoff for under_13 and unknown age brackets. TikTok iOS redirect URI (universal link) has no allowlisted EXPO_PUBLIC_* variable, so it is injected by the caller; until the owner supplies it TikTok on iOS falls back to the OS share sheet (FAIL-14)."
   ],
+  "task_clauses": {
+    "D4.1a": [
+      "SEC-9",
+      "SEC-10",
+      "SEC-11",
+      "SEC-18",
+      "ECON-7",
+      "FAIL-10"
+    ],
+    "D4.2a": [
+      "SEC-12",
+      "REC-5",
+      "REC-6",
+      "CON-5",
+      "CON-6",
+      "CON-7",
+      "CON-8",
+      "FAIL-11"
+    ],
+    "D6.1a": [
+      "SEC-13",
+      "SEC-14",
+      "SEC-18",
+      "FAIL-12",
+      "FAIL-13",
+      "REC-7",
+      "CON-9",
+      "CON-10",
+      "CON-11",
+      "MEDIA-1"
+    ],
+    "D6.2a": [
+      "SEC-15",
+      "SEC-16",
+      "SEC-17",
+      "SEC-18",
+      "SEC-19",
+      "FAIL-14",
+      "FAIL-15",
+      "FAIL-16",
+      "CON-12",
+      "MEDIA-2"
+    ],
+    "D5.1a": [
+      "A11Y-1",
+      "A11Y-2",
+      "A11Y-3",
+      "UI-1",
+      "UI-2",
+      "SEC-15",
+      "SEC-17"
+    ],
+    "D7.4a": [
+      "REL-1",
+      "REL-2",
+      "REL-3",
+      "REL-4",
+      "REL-5",
+      "SEC-20"
+    ]
+  },
   "interfaces": [
     {
       "name": "PoseSourceProvider",
@@ -116,6 +179,97 @@
       "pre": "Existing testIDs and notices keep their text: 'Dev Client build' (native_unavailable) and 'parent verifies' (parent_locked).",
       "post": "Screen mounts MediapipePoseView only when sourceKind === 'mediapipe'; SkeletonOverlay replaces the View dots; telemetry-fps shows FpsMeter output; pose-source shows MOCK or LIVE; every new snapshot.cue -> cuePlayer.play(cue). AppStateContext owns one CuePlayer (prepare on persona change, AppState listener for REC-2).",
       "errors": "sourceError -> drill-notice text; never silently swaps sources mid-drill (CON-2)."
+    },
+    {
+      "name": "DebriefUsageRecord + usage log line (D4.1a; server telemetry inside contract v1.1.0)",
+      "signature": "// supabase/functions/_shared/usageTelemetry.ts - zero imports, no Deno globals; jest-tested from src/__tests__/services/voice/usageTelemetry.test.ts\nexport interface DebriefUsageRecord { readonly evt: 'debrief_usage'; readonly v: 1; readonly inputTokens: number; readonly outputTokens: number; readonly ttsChars: number; readonly ttsOk: boolean }\nexport function toUsageRecord(result: { status: number; body: unknown }): DebriefUsageRecord | null;\nexport function formatUsageLogLine(record: DebriefUsageRecord): string;   // one line, JSON with exactly the 6 keys in the order above\nexport function parseUsageLogLine(line: string): DebriefUsageRecord | null;\n// supabase/functions/voice-debrief/index.ts, right after handleDebrief returns `result`:\n//   const rec = toUsageRecord(result); if (rec) console.log(formatUsageLogLine(rec));",
+      "pre": "result is the { status, body } returned by voiceCore.handleDebrief. No contract change: DebriefResponse v1.1.0 already carries usage.inputTokens/outputTokens; ttsChars = body.text.length (the exact string sent to TTS and charged, ECON-3) and ttsOk = body.audioUrl is a non-empty string (FAIL-7). A v1.2.0 bump is NOT required.",
+      "post": "toUsageRecord returns a record only for status 200 with body.ok === true, a string text of 1..400 chars and usage tokens that are finite integers >= 0; otherwise null. formatUsageLogLine output starts with {\"evt\":\"debrief_usage\" and contains only numbers and one boolean (SEC-10). parseUsageLogLine accepts the bare line, a line with any prefix/suffix around the JSON object, and the same object with backslash-escaped quotes (log export wrapping); it returns null for anything else, for extra or missing keys, wrong types, negative or non-integer numbers, or ttsChars > 400 (SEC-11). parseUsageLogLine(formatUsageLogLine(r)) deep-equals r.",
+      "errors": "None of the three functions throws for any input (FAIL-10). Telemetry never changes the HTTP response."
+    },
+    {
+      "name": "summarizeDebriefUsage + debrief-cost-report CLI (D4.1a)",
+      "signature": "// src/services/voice/costReport.ts (pure; imports only ./costModel)\nexport interface DebriefUsageSample { readonly inputTokens: number; readonly outputTokens: number; readonly ttsChars: number; readonly ttsOk: boolean }\nexport const COST_REPORT_TOLERANCE = 0.1;\nexport const DEFAULT_DEBRIEFS_PER_MONTH = 40; // 16 000-char cap / 400 chars\nexport interface DebriefCostReport {\n  readonly count: number; readonly ttsFailures: number;\n  readonly meanInputTokens: number; readonly meanOutputTokens: number; readonly meanTtsChars: number;\n  readonly actualUsdPerDebrief: number;   // mean of estimateDebriefCostUsd(ttsOk ? ttsChars : 0, inputTokens, outputTokens)\n  readonly modelUsdPerDebrief: number;    // estimateDebriefCostUsd(DEBRIEF_MAX_CHARS, AVG_DEBRIEF_INPUT_TOKENS, AVG_DEBRIEF_OUTPUT_TOKENS)\n  readonly deltaPct: number;              // (actual - model) / model * 100\n  readonly overModel: boolean;            // actual > model * (1 + COST_REPORT_TOLERANCE)\n  readonly projectedMonthlyUsd: number;   // actual * debriefsPerMonth\n}\nexport function summarizeDebriefUsage(samples: readonly DebriefUsageSample[], opts?: { debriefsPerMonth?: number }): DebriefCostReport | null; // null when samples is empty\nexport function renderCostReport(report: DebriefCostReport): string; // aggregates only\n// scripts/debrief-cost-report.ts   run: npx --yes tsx scripts/debrief-cost-report.ts <usage-log-file>",
+      "pre": "The log file is any text export of the voice-debrief function logs (Person B, D4.1). The script reads that one local file, maps lines through parseUsageLogLine and passes the records to summarizeDebriefUsage.",
+      "post": "No price constant is duplicated: every USD figure comes from costModel.ts exports (ECON-7). The script prints renderCostReport plus the count of skipped lines; it never echoes a raw input line, makes no network call and reads no environment variable (SEC-11).",
+      "errors": "Exit 0 = report printed (also when overModel is true; the report says OVER MODEL). Exit 1 = file unreadable or zero valid records. Exit 2 = missing path argument."
+    },
+    {
+      "name": "Group leaderboard convergence (D4.2a; behaviour only, PitchIqRepository signature unchanged)",
+      "signature": "// src/services/supabase/repository.ts - SupabaseRepository only\nlistGroupMembers(groupId: string): Promise<GroupMemberStat[]>;   // now returned in ascending userId order (code-unit compare)\nsubscribeToGroup(groupId: string, onChange: (members: GroupMemberStat[]) => void): () => void; // refetch-on-trigger with a latest-wins guard\n// src/screens/GroupSessionScreen.tsx - the initial listGroupMembers result is applied only if no subscription snapshot has arrived yet\n// src/__tests__/services/fakeRealtime.ts (test helper, not product code)\nexport function createFakeRealtimeServer(): FakeRealtimeServer; // shared in-memory rows + N fake SupabaseClients with deferred query resolution, per-client event delivery (duplicate, reorder, drop) and channel status emission",
+      "pre": "Builds on REC-4 (D2.3a): every SUBSCRIBED status triggers a refetch. join = subscribeToGroup + SUBSCRIBED; leave = the returned unsubscribe, or CHANNEL_ERROR / TIMED_OUT / CLOSED; rejoin = a later SUBSCRIBED on the same channel or a fresh subscribeToGroup.",
+      "post": "Each trigger (change event or SUBSCRIBED) starts fetch number n = ++started; a resolved fetch is delivered only if it is not closed and n > lastDelivered, then lastDelivered = n (CON-5). The event payload is never read (SEC-12). State-based refetch makes duplicates and reordering harmless (CON-6). Two clients that have each processed their last trigger hold deep-equal snapshots equal to server truth (REC-5). DemoRepository is unchanged.",
+      "errors": "A rejected fetch is swallowed, delivers nothing and leaves lastDelivered unchanged; the next trigger recovers (FAIL-11). After unsubscribe nothing is delivered, even from fetches already in flight, and removeChannel is called exactly once (REC-6)."
+    },
+    {
+      "name": "ClipEncoder + buildClipEncodeRequest (D6.1a; library-agnostic)",
+      "signature": "// src/services/highlight/clipEncoder.ts - imports only ../../types/contracts and ../share/ffmpegCommands (INSTAGRAM_EXPORT_SPEC)\nexport const HIGHLIGHT_CLIP_SPEC: { readonly container: 'mp4'; readonly videoCodec: 'h264'; readonly audioCodec: 'aac'; readonly pixelFormat: 'yuv420p'; readonly scan: 'progressive'; readonly fastStart: true; readonly width: 1080; readonly height: 1920; readonly fps: 30; readonly maxDurationMs: 15000 };\nexport interface ClipEncodeRequest { readonly inputUri: string; readonly outputUri: string; readonly startMs: number; readonly durationMs: number; readonly spec: typeof HIGHLIGHT_CLIP_SPEC }\nexport type ClipEncodeFailure = 'unavailable' | 'invalid_request' | 'encode_failed' | 'spec_mismatch';\nexport type ClipEncodeResult = { readonly ok: true; readonly outputUri: string; readonly durationMs: number } | { readonly ok: false; readonly reason: ClipEncodeFailure };\nexport interface ClipEncoder { isAvailable(): boolean; encode(request: ClipEncodeRequest): Promise<ClipEncodeResult> }\nexport function isValidClipRequest(request: ClipEncodeRequest): boolean;\nexport function buildClipEncodeRequest(opts: { inputUri: string; outputUri: string; window: HighlightWindow }): ClipEncodeRequest;",
+      "pre": "width, height, fps and maxDurationMs are derived from INSTAGRAM_EXPORT_SPEC (maxDurationSec * 1000), never retyped.",
+      "post": "buildClipEncodeRequest: startMs = max(0, window.startMs); durationMs = min(maxDurationMs, max(0, window.endMs - window.startMs)) - the same clamp as buildHighlightClipArgs, so startMs/1000 and durationMs/1000 formatted with 3 decimals equal its -ss and -t values (MEDIA-1). isValidClipRequest is true only when both URIs start with file://, differ, startMs and durationMs are finite, startMs >= 0 and 0 < durationMs <= maxDurationMs.",
+      "errors": "Pure; never throws. Any ClipEncoder implementation resolves (never rejects) with a ClipEncodeFailure (FAIL-13)."
+    },
+    {
+      "name": "highlightEncoderBinding (D6.1a; the only reference to modules/highlight-encoder)",
+      "signature": "// src/services/highlight/highlightEncoderBinding.ts - lazy require('../../../modules/highlight-encoder') inside try/catch\nexport interface NativeHighlightEncoder {\n  encodeHighlightClip(options: { inputUri: string; outputUri: string; startMs: number; durationMs: number; width: number; height: number; fps: number; videoCodec: 'h264'; audioCodec: 'aac'; pixelFormat: 'yuv420p'; fastStart: true }): Promise<{ outputUri: string; durationMs: number; videoCodec: string; audioCodec: string; pixelFormat: string; fastStart: boolean }>;\n}\nexport const CLIP_DURATION_SLACK_MS = 50;\nexport function isHighlightEncoderAvailable(): boolean;\nexport function createNativeClipEncoder(): ClipEncoder;",
+      "pre": "NativeHighlightEncoder is the JS contract the Swift/Kotlin module must meet in D6.1 (device work, out of scope here). In Jest the module is provided only by jest.mock('../../../../modules/highlight-encoder', factory, { virtual: true }) inside the test files; jest.setup.js is not edited.",
+      "post": "encode: !isValidClipRequest -> invalid_request without calling native; module unavailable -> unavailable; native resolves and echoes h264 / aac / yuv420p / fastStart true with durationMs <= request.durationMs + CLIP_DURATION_SLACK_MS and a file:// outputUri -> ok; any other echo -> spec_mismatch; native rejects or throws -> encode_failed.",
+      "errors": "isHighlightEncoderAvailable() returns false and never throws when the module is missing, its require throws, or encodeHighlightClip is not a function - Expo Go, Jest, web (FAIL-12)."
+    },
+    {
+      "name": "HighlightClipService + ClipFiles (D6.1a)",
+      "signature": "// src/services/highlight/highlightClip.ts - imports clipEncoder.ts, the domain barrel (selectPeakStreakWindow) and contracts only\nexport interface ClipFiles { cacheDir(): string; exists(uri: string): Promise<boolean>; remove(uri: string): Promise<void> }\nexport type HighlightClipResult = { readonly ok: true; readonly clipUri: string; readonly window: HighlightWindow; readonly durationMs: number } | { readonly ok: false; readonly reason: ClipEncodeFailure | 'invalid_input' | 'busy' };\nexport interface HighlightClipService { makeClip(input: { recordingUri: string; eventTimestampsMs: readonly number[]; totalDurationMs: number }): Promise<HighlightClipResult> }\nexport function createHighlightClipService(deps: { encoder: ClipEncoder; files: ClipFiles; now?: () => number }): HighlightClipService;\n// src/services/highlight/clipFiles.ts - the only file that references expo-file-system (required lazily inside the factory)\nexport function createExpoClipFiles(): ClipFiles;",
+      "pre": "recordingUri is the file:// URI returned by expo-camera recordAsync({ maxDuration: 15 }) once the camera-mode machine is in 'record' (device wiring, D6.1). files.cacheDir() returns a file:// directory URI ending in '/'.",
+      "post": "makeClip: recordingUri not file:// or totalDurationMs not finite / <= 0 -> invalid_input (nothing called). Otherwise window = selectPeakStreakWindow(eventTimestampsMs, totalDurationMs); outputUri = `${files.cacheDir()}highlight-${now()}.mp4`; encoder.encode(buildClipEncodeRequest(...)). On success and on failure the raw recording is removed; on failure the partial output is removed if it exists (SEC-14, FAIL-13). No network, no upload.",
+      "errors": "Never rejects: files.exists/remove rejections are swallowed. A makeClip call while another is in flight resolves { ok: false, reason: 'busy' } and touches no file (CON-11)."
+    },
+    {
+      "name": "CameraModeController (D6.1a; D-5 / D-7 single camera session)",
+      "signature": "// src/services/highlight/cameraMode.ts - pure TS: no React, no camera or pose import\nexport type CameraMode = 'idle' | 'pose' | 'record';\nexport type MountedCamera = 'none' | 'pose' | 'record';\nexport interface CameraModeState { readonly mode: CameraMode; readonly mounted: MountedCamera; readonly switching: boolean }\nexport interface CameraModeClock { setTimeout(fn: () => void, ms: number): unknown; clearTimeout(handle: unknown): void }\nexport type CameraModeResult = { readonly ok: true; readonly state: CameraModeState } | { readonly ok: false; readonly reason: 'superseded' | 'teardown_timeout' };\nexport interface CameraModeController {\n  getState(): CameraModeState;\n  subscribe(listener: (state: CameraModeState) => void): () => void;\n  request(mode: CameraMode): Promise<CameraModeResult>;\n  notifyUnmounted(kind: 'pose' | 'record'): void;   // called from the unmount cleanup of MediapipePoseView / CameraView\n}\nexport const CAMERA_TEARDOWN_MS = 250;\nexport const CAMERA_TEARDOWN_TIMEOUT_MS = 1000;\nexport function createCameraModeController(opts?: { clock?: CameraModeClock; teardownMs?: number; teardownTimeoutMs?: number }): CameraModeController;",
+      "pre": "Initial state { mode: 'idle', mounted: 'none', switching: false }. UI rule for the D6.1 device wiring: mount MediapipePoseView only while mounted === 'pose' and expo-camera CameraView only while mounted === 'record'.",
+      "post": "request(m) when settled on m resolves ok at once. From mounted 'none' the target mounts immediately. From mounted X to any other target: emit { mounted: 'none', switching: true }, wait for notifyUnmounted(X), then teardownMs on the clock, then emit the target (mounted = m, or 'none' for idle) with switching false (CON-9). A request made while switching replaces the target; the replaced promise resolves superseded and the teardown wait is not restarted or skipped (CON-10).",
+      "errors": "Never rejects or throws. No notifyUnmounted(X) within teardownTimeoutMs -> the pending request resolves teardown_timeout and the controller settles at { mode: 'idle', mounted: 'none', switching: false }; later requests work (REC-7). notifyUnmounted for a kind that is not being torn down is ignored."
+    },
+    {
+      "name": "OvrSticker (D6.2a)",
+      "signature": "// src/components/OvrSticker.tsx\nexport interface OvrStickerProps { ovr: OvrResult; badges: readonly Badge[]; testID?: string } // testID default 'ovr-sticker'\nexport const OvrSticker: React.ForwardRefExoticComponent<OvrStickerProps & React.RefAttributes<View>>;\n// child testIDs: ovr-sticker-value, ovr-sticker-band, ovr-sticker-position",
+      "pre": "Imports only react, react-native, ../theme/tokens, ../types/contracts and STICKER_SPEC from the existing services barrel. Tokens only (lint:tokens): every dimension comes from tokens or STICKER_SPEC.",
+      "post": "Root View: ref forwarded, collapsable={false}, backgroundColor colors.transparent, aspectRatio STICKER_SPEC.width / STICKER_SPEC.height, maxWidth STICKER_SPEC.width, no elevation and no shadow* style (MEDIA-2). Content: OVR value with 1 decimal, band, position, the six ATTRIBUTE_LABELS with rounded values, at most 3 badge labels, the word PITCHIQ. Text sits on an inner card whose colors are an approved A11Y-1 pair.",
+      "errors": "Props carry no display name, user id, age, wearable or free-text field, so none can be rendered (SEC-18)."
+    },
+    {
+      "name": "StickerCapture (D6.2a)",
+      "signature": "// src/services/share/stickerCapture.ts - the only file that references react-native-view-shot (required lazily in the default deps)\nexport const STICKER_CAPTURE_OPTIONS: { readonly format: 'png'; readonly width: 640; readonly height: 480; readonly quality: 1; readonly result: 'tmpfile' }; // format/width/height read from STICKER_SPEC\nexport type StickerCaptureResult = { readonly ok: true; readonly uri: string } | { readonly ok: false; readonly reason: 'not_ready' | 'capture_failed' };\nexport interface StickerCaptureDeps { captureRef(target: unknown, options: typeof STICKER_CAPTURE_OPTIONS): Promise<string>; releaseCapture(uri: string): void }\nexport interface StickerCapture { capture(target: unknown): Promise<StickerCaptureResult>; release(uri: string): void }\nexport function createStickerCapture(deps?: StickerCaptureDeps): StickerCapture;",
+      "pre": "target is the ref (or ref.current) of a laid-out OvrSticker. react-native-view-shot is mocked per test file with jest.mock('react-native-view-shot', factory).",
+      "post": "capture calls deps.captureRef(target, STICKER_CAPTURE_OPTIONS) exactly once and returns a uri that starts with file:// (prefixing a bare path) and ends with .png (MEDIA-2). release(uri) calls deps.releaseCapture once and swallows errors.",
+      "errors": "target null/undefined -> not_ready without calling captureRef. captureRef rejects, throws, or returns an empty or non-.png path, or the library is unavailable -> capture_failed. Never rejects (FAIL-15)."
+    },
+    {
+      "name": "ShareConfig (D6.2a)",
+      "signature": "// src/services/share/shareConfig.ts\nexport interface ShareConfig { readonly facebookAppId: string | null; readonly tiktokClientKey: string | null }\nexport function getShareConfig(env?: Record<string, string | undefined>): ShareConfig;",
+      "pre": "Same pattern as src/services/config.ts: static dotted reads of process.env.EXPO_PUBLIC_FACEBOOK_APP_ID and process.env.EXPO_PUBLIC_TIKTOK_CLIENT_KEY when no env override is given (Expo inlines only static access).",
+      "post": "Values are trimmed. facebookAppId is kept only if it matches ^[0-9]{5,20}$; tiktokClientKey only if it matches ^[A-Za-z0-9_-]{6,64}$; otherwise null. No other variable is read (SEC-15).",
+      "errors": "Never throws; missing or malformed -> null, which routes the handoff to the OS share sheet (FAIL-14). No placeholder id is ever substituted."
+    },
+    {
+      "name": "SocialHandoff + socialHandoffBinding (D6.2a)",
+      "signature": "// src/services/share/socialHandoff.ts - pure orchestration; imports contracts, ../../theme/tokens (shareColors) and ./shareConfig types only\nexport type SocialHandoffResult = { readonly ok: true; readonly via: 'native' | 'os_share' } | { readonly ok: false; readonly reason: 'age_restricted' | 'invalid_media' | 'busy' | 'cancelled' | 'failed' };\nexport interface SocialShareRequest { readonly target: ShareTarget; readonly videoUri: string | null; readonly stickerUri: string; readonly ageBracket: AgeBracket | null; readonly attributionUrl?: string }\nexport interface InstagramStoriesPayload { readonly appId: string; readonly stickerImage: string; readonly backgroundVideo?: string; readonly backgroundTopColor: string; readonly backgroundBottomColor: string; readonly attributionURL?: string }\nexport interface NativeSocialHandoff {\n  shareToInstagramReels(options: { videoUri: string; stickerUri: string; facebookAppId: string }): Promise<void>;\n  shareToTikTok(options: { clientKey: string; redirectUri: string; mediaUri: string }): Promise<void>;\n}\nexport interface SocialHandoffDeps {\n  readonly platform: 'ios' | 'android' | 'web';\n  readonly config: ShareConfig;\n  readonly tiktokRedirectUri: string | null;\n  isTargetInstalled(target: ShareTarget): Promise<boolean>;\n  shareInstagramStories(payload: InstagramStoriesPayload): Promise<void>;\n  readonly native: NativeSocialHandoff | null;\n  saveToLibrary(fileUri: string): Promise<string | null>;                                  // iOS PHAsset localIdentifier, used for TikTok on iOS only\n  openOsShare(options: { url: string; type: 'video/mp4' | 'image/png' }): Promise<'shared' | 'dismissed'>;\n}\nexport interface SocialHandoff { share(request: SocialShareRequest): Promise<SocialHandoffResult> }\nexport function createSocialHandoff(deps: SocialHandoffDeps): SocialHandoff;\n// src/services/share/socialHandoffBinding.ts - the only file that references modules/social-handoff, react-native-share and expo-media-library (all required lazily in try/catch)\nexport function getNativeSocialHandoff(): NativeSocialHandoff | null;\nexport function createDefaultSocialHandoffDeps(opts: { platform: 'ios' | 'android' | 'web'; tiktokRedirectUri?: string | null; env?: Record<string, string | undefined> }): SocialHandoffDeps;",
+      "pre": "NativeSocialHandoff is the JS contract for the Swift/Kotlin module + config plugin (device work, D6.2; out of scope here). In Jest it exists only through jest.mock('../../../../modules/social-handoff', factory, { virtual: true }) inside the test files. react-native-share and expo-media-library are mocked per test file.",
+      "post": "share(), in order: (1) ageBracket null or 'under_13' -> age_restricted, zero dependency calls (SEC-17). (2) stickerUri not file://, or videoUri neither null nor file://, or videoUri null for instagram_reels / tiktok -> invalid_media, zero dependency calls. (3) Native path only if every precondition holds - instagram_stories: facebookAppId and installed -> shareInstagramStories(payload); instagram_reels: facebookAppId, native and installed -> native.shareToInstagramReels; tiktok: tiktokClientKey, native, installed and (platform !== 'ios' or tiktokRedirectUri) -> on iOS mediaUri = saveToLibrary(videoUri) (null = precondition failed), elsewhere mediaUri = videoUri -> native.shareToTikTok. platform 'web' never takes the native path. Success -> { ok: true, via: 'native' }. (4) Precondition unmet or the native call rejects -> openOsShare({ url: videoUri ?? stickerUri, type }) exactly once: 'shared' -> { ok: true, via: 'os_share' }, 'dismissed' -> cancelled, rejection -> failed (FAIL-14). The Stories payload has backgroundVideo only when videoUri is non-null and attributionURL only for a non-empty https:// URL (SEC-16).",
+      "errors": "share() never rejects; a rejecting isTargetInstalled counts as not installed. A second share() while one is in flight -> busy with zero dependency calls (CON-12). getNativeSocialHandoff() returns null and never throws when the module is missing, throws, or lacks either method (FAIL-16)."
+    },
+    {
+      "name": "HighlightShareScreen v2 + reduce-motion HudPrimitives (D5.1a, wave 3)",
+      "signature": "// src/screens/HighlightShareScreen.tsx - new testIDs: ovr-sticker (OvrSticker root), share-age-locked (notice); existing share-<target>, share-summary, highlight-window, ffmpeg-command, highlight-empty keep their ids\n// src/components/HudPrimitives.tsx - HudButton, HudToggle, StatBar read useReducedMotion() from react-native-reanimated\n// src/screens/GroupSessionScreen.tsx - own-row (rowMe) rank text color\n// .maestro/pose-telemetry.yaml, .maestro/sticker-share.yaml, .maestro/under13-share-locked.yaml (new flows); .maestro/mvp-smoke.yaml (extend only)",
+      "pre": "Wave 2 merged: OvrSticker is exported from src/components, getShareConfig from src/services, and the Combine screen renders skeleton-overlay, telemetry-fps and pose-source.",
+      "post": "HighlightShareScreen mounts OvrSticker when an OVR exists; share ids come from getShareConfig() - the screen contains no process.env reference and no placeholder id (SEC-15); share-summary names the target and says whether native handoff is configured or the OS share sheet will be used; for ageBracket null or under_13 every share-<target> button is disabled and share-age-locked is shown (SEC-17). With reduced motion on, HudButton never changes scale and HudToggle / StatBar assign their final value directly without withTiming or withSpring (A11Y-2). Invoking createStickerCapture / createSocialHandoff from the screen needs a recorded clip and the native modules and is D6.2 device wiring, not this task.",
+      "errors": "No OVR -> highlight-empty as today, no sticker. Tokens stay frozen: a failing A11Y-1 pair is a blocker to report, never a tokens.ts edit."
+    },
+    {
+      "name": "Release config (D7.4a; the only authorized app.json / eas.json edits after D2.0)",
+      "signature": "// app.json - authorized keys ONLY: expo.ios.buildNumber ('1'), expo.android.versionCode (1), expo.ios.infoPlist.ITSAppUsesNonExemptEncryption (false), expo.android.blockedPermissions\n// eas.json - authorized key ONLY: build.production = { distribution: 'store', autoIncrement: true, android: { buildType: 'app-bundle' }, ios: {} }\n// docs/RELEASE_CHECKLIST.md (new)\n// src/__tests__/release/releaseConfig.test.ts (new; reads the three files with fs)",
+      "pre": "D2.0 merged. cli.appVersionSource stays 'remote', so EAS owns the live build numbers; the app.json values are the initial ones and the checklist says so. expo.extra.eas.projectId and expo.owner are written by `eas init` (human, D7.4) and are not required by the test.",
+      "post": "android.blockedPermissions contains android.permission.READ_MEDIA_VIDEO, READ_MEDIA_IMAGES, READ_MEDIA_AUDIO, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, ACCESS_MEDIA_LOCATION, ACCESS_FINE_LOCATION and ACCESS_COARSE_LOCATION, and never CAMERA or RECORD_AUDIO. Everything D2.0 wrote (plugins and their options, development profile, permission strings) is byte-for-byte unchanged unless REL-3 fails on a string, in which case only that string is fixed and the change is reported.",
+      "errors": "Any need to touch another app.json / eas.json key, package.json, or a plugin option -> stop and report as a blocker."
     }
   ],
   "invariants": {
@@ -133,7 +287,20 @@
       "ECON-3 Monthly debrief TTS budget 16 000 chars per user: 400 chars are reserved atomically BEFORE any LLM/TTS call; a refused reservation returns 200 {ok:false, reason:'monthly_cap'} with zero spend; afterwards 400 - text.length is refunded; LLM refusal/error/empty refunds all 400.",
       "ECON-4 Request body <= 8192 bytes (413), server prompt <= 6000 chars, badges <= 7 unique ids, wearables <= 7 records.",
       "ECON-5 Tier 3 Q&A: consume_qa_seconds grants min(requested, cap - used) with cap clamped to [300, 600] s/month (default 300); voice-qa accepts 0..120 s per call; client QaBudget stays clamped to [5, 10] min.",
-      "ECON-6 No automatic retries of paid calls: one invoke per debrief(); any failure falls back to the template."
+      "ECON-6 No automatic retries of paid calls: one invoke per debrief(); any failure falls back to the template.",
+      "SEC-9 (D4.1a) Telemetry never leaks to the client: every handleDebrief body has exactly the keys {ok, text, audioUrl, usage} with usage exactly {inputTokens, outputTokens} (finite integers >= 0), or exactly {ok, reason}. No body contains any part of the server prompt, the reserved month, a char-budget figure, a user id, an upstream error message or status, or an environment value.",
+      "SEC-10 (D4.1a) The server usage log line has exactly the keys evt, v, inputTokens, outputTokens, ttsChars, ttsOk - numbers and one boolean only; no user id, persona, prompt or debrief text, audio URL, wearable value or key. usageTelemetry.ts has zero imports and no Deno reference. In voice-debrief/index.ts every console.* call logs either a plain string literal or formatUsageLogLine(...).",
+      "SEC-11 (D4.1a) parseUsageLogLine returns null for extra or missing keys, wrong types, negative or non-integer numbers and ttsChars > 400, so foreign log content is never accepted. scripts/debrief-cost-report.ts reads one local file, prints aggregates only (never a raw line), and contains no fetch, no http(s) URL and no process.env read.",
+      "SEC-12 (D4.2a) Realtime payloads are triggers, never data: the postgres_changes handler ignores its argument and refetches through RLS, so a forged or foreign-group event cannot add, remove or alter a leaderboard row.",
+      "SEC-13 (D6.1a) modules/highlight-encoder is referenced only by src/services/highlight/highlightEncoderBinding.ts and expo-file-system only by src/services/highlight/clipFiles.ts. clipEncoder.ts, highlightClip.ts and cameraMode.ts import no native, camera, pose, file-system or encoder package (ClipEncoder is library-agnostic). package.json has no dependency matching ffmpeg, vision-camera or nitro (D-4, D-7).",
+      "SEC-14 (D6.1a) The highlight pipeline is local-only: no file under src/services/highlight/ contains fetch(, XMLHttpRequest, a supabase import or an http(s):// literal; input and output must be file:// URIs; output is written only under files.cacheDir(); the raw recording is removed after encode success and after encode failure.",
+      "SEC-15 (D6.2a, D5.1a) The only share identifiers are EXPO_PUBLIC_FACEBOOK_APP_ID and EXPO_PUBLIC_TIKTOK_CLIENT_KEY. Within src/services they are read only in share/shareConfig.ts; after D5.1a no screen or component reads process.env. Every EXPO_PUBLIC_* name anywhere in non-test src is in {SUPABASE_URL, SUPABASE_ANON_KEY, DEMO_MODE, FACEBOOK_APP_ID, TIKTOK_CLIENT_KEY}. No share type has a client-secret or access-token field, and no placeholder id is ever passed to a native call.",
+      "SEC-16 (D6.2a) The Instagram Stories payload has only the keys appId, stickerImage, backgroundVideo, backgroundTopColor, backgroundBottomColor, attributionURL. attributionURL is absent (the key is not present at all, never '' or undefined) unless the request carries a non-empty https:// URL; backgroundVideo is absent when videoUri is null.",
+      "SEC-17 (D6.2a, D5.1a) Under-13 stays private: SocialHandoff.share resolves age_restricted with zero dependency calls (no native handoff, no OS share, no library save) when ageBracket is null or 'under_13'; HighlightShareScreen disables every share-<target> button and shows share-age-locked for the same brackets.",
+      "SEC-18 (D4.1a, D6.1a, D6.2a) Strava and wearable data never reach share, highlight or telemetry code: no file under src/services/share/, src/services/highlight/, src/components/OvrSticker.tsx or supabase/functions/_shared/usageTelemetry.ts matches /strava|wearable/i, and OvrStickerProps, SocialShareRequest and DebriefUsageRecord have no wearable field.",
+      "SEC-19 (D6.2a) modules/social-handoff, react-native-share and expo-media-library are referenced only by src/services/share/socialHandoffBinding.ts; react-native-view-shot only by src/services/share/stickerCapture.ts. Shared media is always a local file:// URI - a remote URL is never handed to another app.",
+      "SEC-20 (D7.4a) app.json, eas.json and docs/RELEASE_CHECKLIST.md contain no secret value: no match for sk-ant-, service_role, xi-api-key or a JWT-shaped eyJ... string; every EXPO_PUBLIC_* name is on the allowlist; expo.extra has no key other than eas.",
+      "ECON-7 (D4.1a) The cost report has no price constant of its own: actualUsdPerDebrief and modelUsdPerDebrief come from costModel.ts exports only; a failed TTS (ttsOk false) is costed at 0 TTS chars; overModel is true exactly when actual > model * 1.10."
     ],
     "failure": [
       "FAIL-1 isMediapipeAvailable() returns false and never throws in Expo Go, Jest and web; the library is required lazily inside try/catch.",
@@ -144,19 +311,57 @@
       "FAIL-6 Debrief transport error, timeout (12 s), ok:false or empty text -> template debrief (source 'template', cost 0); zero-key Demo Mode is unchanged.",
       "FAIL-7 voice-debrief TTS failure still returns 200 ok with audioUrl null; the chars stay charged (text.length).",
       "FAIL-8 CuePlayer.play returns false and never throws on a missing source, before prepare(), or on any player exception; the caption still renders.",
-      "FAIL-9 prepare() pre-warms each created player once at volume 0 (expo-audio Android first-play silence, #52722)."
+      "FAIL-9 prepare() pre-warms each created player once at volume 0 (expo-audio Android first-play silence, #52722).",
+      "FAIL-10 (D4.1a) Telemetry can never break a debrief: toUsageRecord, formatUsageLogLine and parseUsageLogLine never throw; a non-200, ok:false, malformed or NaN-usage result yields null (no log line) and the HTTP response is unchanged. summarizeDebriefUsage([]) returns null; the CLI exits 1 on an unreadable file or zero valid records and 2 on a missing argument.",
+      "FAIL-11 (D4.2a) A refetch that rejects during convergence is swallowed and delivers nothing; the client keeps its last snapshot, and the next change event or SUBSCRIBED brings it back to server truth.",
+      "FAIL-12 (D6.1a) isHighlightEncoderAvailable() returns false and never throws when modules/highlight-encoder is missing, throws on require or lacks encodeHighlightClip; encode() then resolves {ok:false, reason:'unavailable'}.",
+      "FAIL-13 (D6.1a) ClipEncoder.encode and HighlightClipService.makeClip never reject: an invalid request never reaches native (invalid_request); a native rejection is encode_failed; an echo that is not h264/aac/yuv420p/fastStart or runs longer than requested + 50 ms is spec_mismatch; on every failure the partial output file is removed.",
+      "FAIL-14 (D6.2a) Share always degrades to the OS share sheet: target app not installed, share id missing or malformed, native module absent, TikTok iOS redirect URI or library save unavailable, or a rejecting native call -> openOsShare exactly once. share() never rejects.",
+      "FAIL-15 (D6.2a) StickerCapture.capture never rejects: null target -> not_ready without a capture call; a rejecting or throwing captureRef, an empty or non-.png result, or a missing library -> capture_failed.",
+      "FAIL-16 (D6.2a) getNativeSocialHandoff() returns null and never throws when modules/social-handoff is missing, throws on require or lacks shareToInstagramReels / shareToTikTok (Expo Go, Jest, web)."
     ],
     "reconnection": [
       "REC-1 Stall: a running provider with no delivered frame for 1500 ms calls onError('stalled') once per stall; the next valid frame clears it; the engine is not reset.",
       "REC-2 AppState background: the runner stops the provider and calls cuePlayer.stopAll(); an active drill is reset (never resumed) with a drill-notice; on 'active' cuePlayer.reassertAudioMode() runs.",
       "REC-3 start() after stop() begins a new stream: frameIndex restarts at 0 and the previous session's callbacks never fire again.",
-      "REC-4 Realtime: subscribeToGroup re-fetches members and calls onChange on every SUBSCRIBED status, including rejoins after CHANNEL_ERROR/TIMED_OUT; unsubscribe removes the channel and silences onChange."
+      "REC-4 Realtime: subscribeToGroup re-fetches members and calls onChange on every SUBSCRIBED status, including rejoins after CHANNEL_ERROR/TIMED_OUT; unsubscribe removes the channel and silences onChange.",
+      "REC-5 (D4.2a) Rejoin convergence: a client that missed any number of changes while its channel was in CHANNEL_ERROR / TIMED_OUT / CLOSED holds, after its next SUBSCRIBED fetch settles, a snapshot deep-equal to server truth and to the snapshot of a client that never disconnected.",
+      "REC-6 (D4.2a) Leave / rejoin lifecycle: after unsubscribe no onChange fires for later events or for fetches already in flight, and removeChannel is called exactly once; a fresh subscribeToGroup opens a new channel and delivers current truth on SUBSCRIBED.",
+      "REC-7 (D6.1a) Camera teardown that is never acknowledged fails closed: without notifyUnmounted within 1000 ms the request resolves teardown_timeout and the controller settles at idle with nothing mounted; a later request succeeds."
     ],
     "concurrency": [
       "CON-1 At most one PoseSourceProvider runs and at most one native camera view is mounted; start() while running stops the previous session first. vision-camera is not installed in Day 2-3 (D-5).",
       "CON-2 One drill consumes frames from exactly one provider kind; changing simulate or drill resets the runner first.",
       "CON-3 reserve/refund/consume RPCs are single transactions under the row lock, so concurrent calls never push debrief_chars_used or qa_seconds_used past the cap.",
-      "CON-4 CuePlayer plays one cue at a time; play(id) stops the cue that is playing (latest wins)."
+      "CON-4 CuePlayer plays one cue at a time; play(id) stops the cue that is playing (latest wins).",
+      "CON-5 (D4.2a) Latest-wins refetch: onChange is never called with the result of a fetch that started before a fetch already delivered; a slow early fetch that resolves after a newer one is dropped.",
+      "CON-6 (D4.2a) Duplicate and out-of-order change events are harmless: delivering the same event N times, or the same set of events in different orders to two clients, leaves both clients with identical final snapshots equal to server truth.",
+      "CON-7 (D4.2a) Canonical order: SupabaseRepository.listGroupMembers returns members in ascending userId order whatever the row order, so the leaderboard ranking (stable sort by bestOvr descending) and computeCrowns tie-breaks are the same on every client.",
+      "CON-8 (D4.2a) GroupSessionScreen never replaces a subscription snapshot with the result of its initial listGroupMembers call: the initial result is applied only if no onChange has fired yet.",
+      "CON-9 (D6.1a) Single camera session: CameraModeState.mounted is one of none | pose | record, and between any emitted state with mounted X and a later one with mounted Y (X, Y in {pose, record}, X != Y) there is an emitted state with mounted 'none', a notifyUnmounted(X) call and at least teardownMs of clock time. Extends CON-1 to the record camera.",
+      "CON-10 (D6.1a) Latest camera request wins: a request made while switching replaces the target, the replaced request resolves superseded, the teardown wait is neither skipped nor restarted, and the final state matches the last request.",
+      "CON-11 (D6.1a) One encode at a time: makeClip while another makeClip is in flight resolves busy and removes or writes no file.",
+      "CON-12 (D6.2a) One handoff at a time: share() while another share() is in flight resolves busy with zero dependency calls."
+    ],
+    "media": [
+      "MEDIA-1 (D6.1a) Highlight clip spec: buildHighlightClipArgs emits -c:v libx264, -c:a aac, -pix_fmt yuv420p, format=yuv420p inside -vf, -field_order progressive, -movflags +faststart and -t <= 15.000; HIGHLIGHT_CLIP_SPEC says h264 / aac / yuv420p / progressive / fastStart with width, height, fps and maxDurationMs equal to INSTAGRAM_EXPORT_SPEC; buildClipEncodeRequest gives the same start and duration as -ss / -t for normal, longer-than-15 s, inverted and negative windows.",
+      "MEDIA-2 (D6.2a) Sticker is a 640x480 transparent PNG: STICKER_CAPTURE_OPTIONS deep-equals {format:'png', width:640, height:480, quality:1, result:'tmpfile'} with format/width/height read from STICKER_SPEC; the OvrSticker root is transparent, 4:3, collapsable={false}, with no elevation or shadow."
+    ],
+    "accessibility": [
+      "A11Y-1 (D5.1a) WCAG 2.1 contrast, computed from src/theme/tokens.ts at test time (no color literal in the test): textPrimary, textSecondary, textMuted, accent, telemetry, warning, danger, crownGold and crownSilver on each of bg, surface, surfaceRaised and surfaceHigh >= 4.5:1; textOnAccent on accent and accentPressed >= 4.5:1; textPrimary, textSecondary and accent on accentDim >= 4.5:1; non-text indicators skeletonJoint and skeletonBone on bg and surfaceRaised, and accent and telemetry on surfaceHigh >= 3:1. Every color in the table must resolve to a #RRGGBB string.",
+      "A11Y-2 (D5.1a) Reduce motion: when useReducedMotion() is true, HudButton keeps scale 1 on press and HudToggle and StatBar set their final value without calling withTiming or withSpring; when false the existing animations still run.",
+      "A11Y-3 (D5.1a) Used-pair fix: text in the own leaderboard row (rowMe, background accentDim) uses only colors approved on accentDim in A11Y-1 - the rank number no longer uses textMuted (3.5:1 on accentDim)."
+    ],
+    "ui": [
+      "UI-1 (D5.1a) Maestro flows are statically sound: every `id:` in .maestro/*.yaml equals a testID literal or starts with a testID template prefix found in non-test src; .maestro/pose-telemetry.yaml asserts skeleton-overlay, telemetry-fps and pose-source; .maestro/sticker-share.yaml asserts ovr-sticker and share-summary and taps share-instagram_stories; .maestro/under13-share-locked.yaml asserts share-age-locked; every flow uses appId com.pitchiq.mvp.",
+      "UI-2 (D5.1a) HighlightShareScreen mounts ovr-sticker whenever an OVR exists and never without one; share-summary names the pressed target and states OS share fallback when the share ids are not configured; every pre-existing testID of the screen is still rendered."
+    ],
+    "release": [
+      "REL-1 (D7.4a) Store identity: expo.ios.bundleIdentifier === expo.android.package, reverse-DNS with at least 3 segments, and equal to the appId of every .maestro flow; expo.version is x.y.z; ios.buildNumber is a string of digits not starting with 0; android.versionCode is an integer >= 1; name, slug, scheme and an existing icon file are present.",
+      "REL-2 (D7.4a; amended Nov 25 by the owner-approved deploy run) eas.json: cli.appVersionSource is 'remote'; build.development deep-equals the D2.0 profile plus env.ORG_GRADLE_PROJECT_reactNativeArchitectures = 'arm64-v8a' (the all-ABI dev build exceeded the 45-min EAS free-tier limit); build.production has distribution 'store', autoIncrement true, android.buildType 'app-bundle', no developmentClient and no architecture override.",
+      "REL-3 (D7.4a) Permission audit: NSCameraUsageDescription, NSMicrophoneUsageDescription and NSPhotoLibraryAddUsageDescription exist, start with PitchIQ and are >= 40 chars; the camera string is identical in infoPlist, the expo-camera plugin and the expo-mediapipe-pose plugin and mentions skeletal and consent; the microphone string is identical in infoPlist, expo-camera and expo-audio; ITSAppUsesNonExemptEncryption is false; infoPlist has no face-id, location, tracking, speech-recognition, contacts or UIBackgroundModes key; android.permissions is exactly [android.permission.CAMERA]; android.blockedPermissions holds the eight media/storage/location permissions and neither CAMERA nor RECORD_AUDIO.",
+      "REL-4 (D7.4a) docs/RELEASE_CHECKLIST.md has sections for prerequisites, version bump, secrets and env, iOS TestFlight, Android Play Internal App Sharing, privacy and store declarations, smoke test and rollback; it contains `eas build --profile production --platform ios`, `eas build --profile production --platform android` and `eas submit`; human, device and secret steps carry the SPRINT_STATE tags; it has no TBD or TODO.",
+      "REL-5 (D7.4a; amended Nov 25 by the owner-approved deploy run) D2.0 config is intact: the plugin order is expo-dev-client, expo-build-properties, expo-audio, expo-camera, expo-media-library, react-native-share, expo-asset, ./plugins/withGradleMemory (expo-mediapipe-pose removed: eas-cli cannot resolve its plugin and it only set the camera text infoPlist + expo-camera already set; withGradleMemory added: memory-safe gradle.properties after the EAS dev build OOM-killed the Gradle daemon); android minSdkVersion is 26; expo-audio has recordAudioAndroid, enableBackgroundRecording and enableBackgroundPlayback false; expo-media-library has granularPermissions [] and isAccessMediaLocationEnabled false; expo-camera has barcodeScannerEnabled false."
     ]
   },
   "out_of_scope": [
@@ -165,7 +370,13 @@
     "Skia v3 / react-native-skia rename / Graphite, useSkiaFrameProcessor, Skia on web (web gets the View-dot fallback)",
     "Live cost logging per debrief (D4.1), two-device Realtime test (D4.2), threshold calibration (D7.1)",
     "Debrief idempotency table / server-side dedupe (needs another migration)",
-    "Any sport other than soccer"
+    "Any sport other than soccer",
+    "Swift/Kotlin of modules/highlight-encoder and modules/social-handoff, plugins/withSocialHandoff, R8 keep rules, the modules/ directory itself (device work D6.1 / D6.2; agents build TS services, interfaces and virtual jest mocks only)",
+    "Mounting expo-camera CameraView, calling recordAsync, and driving CameraModeController / HighlightClipService / StickerCapture / SocialHandoff from a screen (needs the Dev Client rebuild; Person A in D6.1 / D6.2)",
+    "Contract v1.2.0: not needed. Server-reported ttsChars / ttsBilled in DebriefResponse.usage would be the v1.2.0 change if the owner ever wants it; usage for refused or errored completions is not reported",
+    "Realtime push for roster changes: the supabase_realtime publication holds only group_session_results (migration 001, frozen), so a member joining or leaving a group reaches clients at their next trigger, not instantly",
+    "Light theme (tokens.ts defines a dark theme only), contrast of disabled controls and of colors with alpha",
+    "eas init / projectId, App Store Connect and Play Console records, TikTok Share Kit app review, universal-link hosting, EAS submit credentials (human, D7.4)"
   ],
   "acceptance": [
     {
@@ -299,6 +510,202 @@
     {
       "clause_id": "DEV-2",
       "test": "MANUAL: Person B live curl against deployed voice-debrief: legacy body 400, strava 400, cap refusal after forcing used=15 800, voice-qa grant 0 at cap"
+    },
+    {
+      "clause_id": "SEC-9",
+      "test": "src/__tests__/services/voice/usageTelemetry.test.ts > 'ok body has exactly ok,text,audioUrl,usage and usage exactly inputTokens,outputTokens' and 'no response body contains prompt text, the reserved month or upstream error detail' (drives voiceCore.handleDebrief with fake deps through ok, monthly_cap, refused, rate_limited, llm_error, invalid_request)"
+    },
+    {
+      "clause_id": "SEC-10",
+      "test": "usageTelemetry.test.ts > 'log line has exactly evt,v,inputTokens,outputTokens,ttsChars,ttsOk', 'usageTelemetry.ts has zero imports and no Deno reference' and 'voice-debrief index logs only string literals or formatUsageLogLine' (reads the two source files with fs)"
+    },
+    {
+      "clause_id": "SEC-11",
+      "test": "usageTelemetry.test.ts > 'parseUsageLogLine rejects extra keys, wrong types and out-of-range values' and 'round-trips bare, prefixed and escaped lines' + src/__tests__/services/voice/costReport.test.ts > 'cost report script has no fetch, URL or process.env reference' and 'rendered report contains aggregates only'"
+    },
+    {
+      "clause_id": "ECON-7",
+      "test": "costReport.test.ts > 'model cost equals estimateDebriefCostUsd(DEBRIEF_MAX_CHARS, AVG_DEBRIEF_INPUT_TOKENS, AVG_DEBRIEF_OUTPUT_TOKENS)', 'failed TTS is costed at 0 chars' and 'overModel flips just above 10 % tolerance'"
+    },
+    {
+      "clause_id": "FAIL-10",
+      "test": "usageTelemetry.test.ts > 'toUsageRecord returns null and never throws for non-200, ok:false, malformed and NaN-usage results' + costReport.test.ts > 'empty samples -> null'"
+    },
+    {
+      "clause_id": "SEC-12",
+      "test": "src/__tests__/services/groupSync.test.ts > 'forged event payload never reaches onChange'"
+    },
+    {
+      "clause_id": "REC-5",
+      "test": "groupSync.test.ts > 'client that missed updates converges on rejoin' (client B gets CHANNEL_ERROR, three changes land, B gets SUBSCRIBED; A and B snapshots deep-equal server truth)"
+    },
+    {
+      "clause_id": "REC-6",
+      "test": "groupSync.test.ts > 'leave silences in-flight fetches and removes the channel once' and 'a fresh subscribe after leave converges'"
+    },
+    {
+      "clause_id": "CON-5",
+      "test": "groupSync.test.ts > 'stale fetch resolving after a newer one is dropped' (deferred query resolution, resolved in reverse order)"
+    },
+    {
+      "clause_id": "CON-6",
+      "test": "groupSync.test.ts > 'duplicate and reordered events converge on both clients'"
+    },
+    {
+      "clause_id": "CON-7",
+      "test": "groupSync.test.ts > 'row order changes neither the snapshot nor the ranked order on tied bestOvr'"
+    },
+    {
+      "clause_id": "CON-8",
+      "test": "src/__tests__/ui/groupSync.test.tsx > 'late initial list never overwrites a subscription snapshot' and 'initial list is shown when no snapshot arrived'"
+    },
+    {
+      "clause_id": "FAIL-11",
+      "test": "groupSync.test.ts > 'failed refetch keeps the last snapshot and the next event recovers'"
+    },
+    {
+      "clause_id": "SEC-13",
+      "test": "src/__tests__/services/highlight/highlightEncoderBinding.test.ts > 'only the binding references modules/highlight-encoder and only clipFiles references expo-file-system' + src/__tests__/services/highlight/clipEncoder.test.ts > 'agnostic files import no native, camera, pose or encoder package' and 'package.json has no ffmpeg, vision-camera or nitro dependency'"
+    },
+    {
+      "clause_id": "SEC-14",
+      "test": "src/__tests__/services/highlight/highlightClip.test.ts > 'non-file recording URI -> invalid_input without calling the encoder', 'output is written under cacheDir', 'raw recording is removed after success and after failure' and 'highlight sources contain no network API'"
+    },
+    {
+      "clause_id": "FAIL-12",
+      "test": "highlightEncoderBinding.test.ts > 'unavailable when the module is missing, throws or lacks encodeHighlightClip'"
+    },
+    {
+      "clause_id": "FAIL-13",
+      "test": "highlightEncoderBinding.test.ts > 'invalid request never reaches native', 'native rejection -> encode_failed' and 'wrong codec, pixel format, faststart or over-long echo -> spec_mismatch' + highlightClip.test.ts > 'removes partial output on failure and never rejects'"
+    },
+    {
+      "clause_id": "REC-7",
+      "test": "src/__tests__/services/highlight/cameraMode.test.ts > 'missing unmount ack times out to idle with nothing mounted, then recovers' (injected clock)"
+    },
+    {
+      "clause_id": "CON-9",
+      "test": "cameraMode.test.ts > 'pose <-> record always passes through none, the unmount ack and the teardown delay' and 'no emitted state breaks the single-session rule over every request sequence of length <= 4'"
+    },
+    {
+      "clause_id": "CON-10",
+      "test": "cameraMode.test.ts > 'latest request wins and replaced requests resolve superseded'"
+    },
+    {
+      "clause_id": "CON-11",
+      "test": "highlightClip.test.ts > 'second makeClip while encoding returns busy and touches no file'"
+    },
+    {
+      "clause_id": "MEDIA-1",
+      "test": "src/__tests__/services/highlight/clipSpec.test.ts > 'buildHighlightClipArgs emits h264, aac, yuv420p, progressive and faststart', 'HIGHLIGHT_CLIP_SPEC matches INSTAGRAM_EXPORT_SPEC' and 'buildClipEncodeRequest start and duration equal -ss and -t for normal, long, inverted and negative windows'"
+    },
+    {
+      "clause_id": "SEC-15",
+      "test": "src/__tests__/services/share/shareConfig.test.ts > 'reads only the two allowlisted share ids and nulls malformed values', 'services read share ids only in shareConfig.ts' and 'every EXPO_PUBLIC name in src is on the allowlist' + (D5.1a) src/__tests__/ui/highlightShare.test.tsx > 'screens and components contain no process.env and no placeholder id'"
+    },
+    {
+      "clause_id": "SEC-16",
+      "test": "src/__tests__/services/share/socialHandoff.test.ts > 'Stories payload has only allowed keys' and 'attributionURL key is absent unless a non-empty https URL is given'"
+    },
+    {
+      "clause_id": "SEC-17",
+      "test": "socialHandoff.test.ts > 'under_13 or unknown age -> age_restricted with zero dependency calls' + (D5.1a) highlightShare.test.tsx > 'under-13 sees share-age-locked and disabled share buttons'"
+    },
+    {
+      "clause_id": "SEC-18",
+      "test": "socialHandoff.test.ts > 'share sources and OvrSticker never mention strava or wearables' + clipEncoder.test.ts > 'highlight sources never mention strava or wearables' + usageTelemetry.test.ts > 'telemetry source never mentions strava or wearables'"
+    },
+    {
+      "clause_id": "SEC-19",
+      "test": "src/__tests__/services/share/socialHandoffBinding.test.ts > 'native share packages are referenced only by the binding and stickerCapture' + socialHandoff.test.ts > 'non-file media -> invalid_media with zero dependency calls'"
+    },
+    {
+      "clause_id": "FAIL-14",
+      "test": "socialHandoff.test.ts > 'falls back to OS share exactly once when not installed, not configured, module missing, redirect missing on iOS, library save null, or native rejects' and 'share never rejects'"
+    },
+    {
+      "clause_id": "FAIL-15",
+      "test": "src/__tests__/services/share/stickerCapture.test.ts > 'null target -> not_ready without a capture call' and 'rejection, throw, empty or non-png result -> capture_failed'"
+    },
+    {
+      "clause_id": "FAIL-16",
+      "test": "socialHandoffBinding.test.ts > 'getNativeSocialHandoff returns null when the module is missing, throws or is incomplete'"
+    },
+    {
+      "clause_id": "CON-12",
+      "test": "socialHandoff.test.ts > 'second share while one is in flight -> busy'"
+    },
+    {
+      "clause_id": "MEDIA-2",
+      "test": "stickerCapture.test.ts > 'captures png 640x480 tmpfile with options read from STICKER_SPEC' + src/__tests__/ui/ovrSticker.test.tsx > 'root is transparent, 4:3, non-collapsable, without elevation or shadow'"
+    },
+    {
+      "clause_id": "A11Y-1",
+      "test": "src/__tests__/theme/contrast.test.ts > 'approved text pairs are at least 4.5:1', 'non-text indicator pairs are at least 3:1' and 'every pair resolves to #RRGGBB from tokens.ts'"
+    },
+    {
+      "clause_id": "A11Y-2",
+      "test": "src/__tests__/ui/reduceMotion.test.tsx > 'reduced motion sets final values without withTiming or withSpring' and 'default motion still animates'"
+    },
+    {
+      "clause_id": "A11Y-3",
+      "test": "src/__tests__/ui/contrastUsage.test.tsx > 'own leaderboard row uses only colors approved on accentDim'"
+    },
+    {
+      "clause_id": "UI-1",
+      "test": "src/__tests__/ui/maestroFlows.test.ts > 'every flow id resolves to a testID in src', 'required flows cover the new testIDs' and 'every flow uses appId com.pitchiq.mvp'"
+    },
+    {
+      "clause_id": "UI-2",
+      "test": "highlightShare.test.tsx > 'mounts ovr-sticker only when an OVR exists', 'share summary names the target and reports OS share fallback when ids are not configured' and 'pre-existing testIDs are still rendered'"
+    },
+    {
+      "clause_id": "REL-1",
+      "test": "src/__tests__/release/releaseConfig.test.ts > 'bundle id, package and Maestro appId agree' and 'version, buildNumber and versionCode are well-formed'"
+    },
+    {
+      "clause_id": "REL-2",
+      "test": "releaseConfig.test.ts > 'eas production profile is a store build with autoIncrement' and 'development profile and appVersionSource are unchanged'"
+    },
+    {
+      "clause_id": "REL-3",
+      "test": "releaseConfig.test.ts > 'iOS usage strings are present, consistent and specific', 'no forbidden Info.plist keys' and 'Android permissions are minimal and media, storage and location are blocked'"
+    },
+    {
+      "clause_id": "REL-4",
+      "test": "releaseConfig.test.ts > 'release checklist has every required section and command'"
+    },
+    {
+      "clause_id": "REL-5",
+      "test": "releaseConfig.test.ts > 'D2.0 plugin list and options are intact'"
+    },
+    {
+      "clause_id": "SEC-20",
+      "test": "releaseConfig.test.ts > 'app.json, eas.json and the checklist contain no secret and only allowlisted EXPO_PUBLIC names'"
+    },
+    {
+      "clause_id": "DEV-3",
+      "test": "MANUAL (D4.1, Person B): one live debrief per persona on the deployed function, export the voice-debrief logs to a file, run `npx --yes tsx scripts/debrief-cost-report.ts <file>`; paste the report in the SPRINT_STATE session log; overModel must be false or costModel.ts is re-based in a follow-up"
+    },
+    {
+      "clause_id": "DEV-4",
+      "test": "MANUAL (D4.2, Person A): two phones in one group; each submits a drill, one toggles airplane mode for 30 s and returns; both leaderboards, crowns and rivalry panels match within 5 s of reconnect"
+    },
+    {
+      "clause_id": "DEV-5",
+      "test": "MANUAL (D6.1, Person A): 15 s clip on a phone; `ffprobe` shows codec_name=h264, pix_fmt=yuv420p, field_order=progressive, audio codec_name=aac, duration <= 15.05 s, moov before mdat; 5 pose -> record -> pose cycles with no camera lock-up"
+    },
+    {
+      "clause_id": "DEV-6",
+      "test": "MANUAL (D6.2, Person A): sticker PNG is 640x480 RGBA with transparent corners; Instagram Stories shows sticker with no blank link; Reels and TikTok open their composers; with the target app uninstalled the OS share sheet opens"
+    },
+    {
+      "clause_id": "DEV-7",
+      "test": "MANUAL (D5.1, Person A): `maestro test .maestro/` green on a simulator; ui-qa-verifier pass with OS reduce-motion on and off"
+    },
+    {
+      "clause_id": "DEV-8",
+      "test": "MANUAL (D7.4, [secret:EXPO_TOKEN]): `eas build --profile production` for ios and android succeed; TestFlight internal and Play Internal App Sharing links recorded in the session log"
     }
   ]
 }
