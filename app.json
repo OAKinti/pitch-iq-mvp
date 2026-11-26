@@ -103,7 +103,8 @@
           "enableBase64ShareAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "./plugins/withGradleMemory"
     ],
     "owner": "oakinti",
     "extra": {

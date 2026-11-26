@@ -153,6 +153,8 @@ describe('release config', () => {
       'expo-media-library',
       'react-native-share',
       'expo-asset',
+      // Nov 25: memory-safe gradle.properties for EAS (first build OOM-killed the Gradle daemon)
+      './plugins/withGradleMemory',
     ]);
     expect(opts('expo-build-properties').android.minSdkVersion).toBe(26);
     const audio = opts('expo-audio');
